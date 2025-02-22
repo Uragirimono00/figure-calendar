@@ -25,10 +25,16 @@
 {#if !user}
     {#if showSignup}
         <Signup on:authSuccess={handleAuthSuccess} />
-        <p>이미 계정이 있으신가요? <a href="#" on:click|preventDefault={() => showSignup = false}>로그인</a></p>
+        <p>
+            이미 계정이 있으신가요?
+            <button on:click={() => showSignup = false}>로그인</button>
+        </p>
     {:else}
         <Login on:authSuccess={handleAuthSuccess} />
-        <p>계정이 없으신가요? <a href="#" on:click|preventDefault={() => showSignup = true}>회원가입</a></p>
+        <p>
+            계정이 없으신가요?
+            <button on:click={() => showSignup = true}>회원가입</button>
+        </p>
     {/if}
 {:else}
     <Dashboard {user} />

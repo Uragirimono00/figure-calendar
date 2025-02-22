@@ -1,10 +1,10 @@
-<!-- src/ImageModal.svelte -->
 <script>
-    import { createEventDispatcher } from 'svelte';
+    import { onMount, createEventDispatcher } from 'svelte';
     export let image; // { id, src, date, description, month, storagePath }
     const dispatch = createEventDispatcher();
 
     let description = image.description || "";
+    let backdrop;
 
     function save() {
         dispatch('save', { description });
@@ -19,9 +19,16 @@
     function closeModal() {
         dispatch('close');
     }
+
+    onMount(() => {
+        // 모달 백드롭에 포커스를 주어 키보드 이벤트를 받을 수 있도록 합니다.
+        backdrop.focus();
+    });
 </script>
 
-<div class="modal-backdrop" on:click={closeModal}>
+<div class="modal-backdrop" bind:this={backdrop} tabindex="-1" role="dialog"
+     on:click={closeModal}
+     on:keydown={(e) => { if(e.key === 'Escape') closeModal(); }}>
     <div class="modal-content" on:click|stopPropagation>
         <img src={image.src} alt="Selected image" />
         <textarea bind:value={description} placeholder="이미지 설명 추가"></textarea>

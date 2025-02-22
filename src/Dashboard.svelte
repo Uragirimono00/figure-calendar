@@ -92,9 +92,7 @@
   async function handleModalDelete(event) {
     const { id, storagePath } = event.detail;
     try {
-      // Firestore에서 삭제
       await deleteDoc(doc(db, "images", id));
-      // Storage에서 삭제
       const sRef = storageRef(storage, storagePath);
       await deleteObject(sRef);
       images = images.filter(img => img.id !== id);

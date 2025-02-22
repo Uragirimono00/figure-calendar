@@ -1,4 +1,3 @@
-<!-- src/MonthDropzone.svelte -->
 <script>
     import { createEventDispatcher } from 'svelte';
     import { storage, db } from './firebase.js';
@@ -26,7 +25,6 @@
                     description: "",
                     uid: userUid
                 };
-                // Firestore에 저장하고 문서 ID 받기
                 const docRef = await addDoc(collection(db, "images"), imageData);
                 const imageDataWithId = { ...imageData, id: docRef.id, storagePath: snapshot.ref.fullPath };
                 dispatch('imageUploaded', imageDataWithId);
@@ -64,11 +62,18 @@
     }
 </script>
 
-<div class="month-dropzone" on:dragover={handleDragOver} on:drop={handleDrop} on:click={handleClick} tabindex="0" role="button" on:keydown={(event) => { if(event.key === 'Enter') handleClick() }}>
+<div class="month-dropzone"
+     on:dragover={handleDragOver}
+     on:drop={handleDrop}
+     on:click={handleClick}
+     tabindex="0" role="button"
+     on:keydown={(event) => { if(event.key === 'Enter') handleClick(); }}>
     <h3>{month}</h3>
     <div class="images-grid">
         {#each images as img}
-            <img src={img.src} alt="Uploaded image" tabindex="0" role="button" on:click={(event) => handleImageClick(img, event)} on:keydown={(event) => { if(event.key === 'Enter') handleImageClick(img, event) }}/>
+            <button class="image-button" on:click={(event) => handleImageClick(img, event)}>
+                <img src={img.src} alt="Uploaded image" />
+            </button>
         {/each}
     </div>
     <p class="hint">드래그앤드롭 또는 클릭하여 이미지를 업로드하세요</p>
@@ -94,11 +99,19 @@
         gap: 0.5rem;
         margin-top: 1rem;
     }
+    .image-button {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+    .image-button:focus {
+        outline: 2px solid blue;
+    }
     img {
         width: 100%;
         height: auto;
         object-fit: cover;
-        cursor: pointer;
     }
     .hint {
         margin-top: 1rem;
