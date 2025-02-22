@@ -1,3 +1,4 @@
+<!-- src/ImageModal.svelte -->
 <script>
     import { onMount, createEventDispatcher } from 'svelte';
     export let image; // { id, src, date, description, month, storagePath }
@@ -21,7 +22,6 @@
     }
 
     onMount(() => {
-        // 모달 백드롭에 포커스를 주어 키보드 이벤트를 받을 수 있도록 합니다.
         backdrop.focus();
     });
 </script>
@@ -30,7 +30,7 @@
      on:click={closeModal}
      on:keydown={(e) => { if(e.key === 'Escape') closeModal(); }}>
     <div class="modal-content" on:click|stopPropagation>
-        <img src={image.src} alt="Selected image" />
+        <img src={image.src} alt="Uploaded image" />
         <textarea bind:value={description} placeholder="이미지 설명 추가"></textarea>
         <div class="modal-buttons">
             <button on:click={save}>저장</button>
@@ -57,7 +57,7 @@
         background: white;
         padding: 1rem;
         border-radius: 8px;
-        max-width: 90%;
+        max-width: 50vw;
         max-height: 90%;
         overflow-y: auto;
     }

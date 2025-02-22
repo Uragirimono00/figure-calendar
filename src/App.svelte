@@ -17,24 +17,17 @@
         user = event.detail.user;
     }
 
-    function toggleSignup() {
+    // Login.svelte의 showSignup, Signup.svelte의 showLogin 이벤트에 대응
+    function toggleAuthMode() {
         showSignup = !showSignup;
     }
 </script>
 
 {#if !user}
     {#if showSignup}
-        <Signup on:authSuccess={handleAuthSuccess} />
-        <p>
-            이미 계정이 있으신가요?
-            <button on:click={() => showSignup = false}>로그인</button>
-        </p>
+        <Signup on:authSuccess={handleAuthSuccess} on:showLogin={toggleAuthMode} />
     {:else}
-        <Login on:authSuccess={handleAuthSuccess} />
-        <p>
-            계정이 없으신가요?
-            <button on:click={() => showSignup = true}>회원가입</button>
-        </p>
+        <Login on:authSuccess={handleAuthSuccess} on:showSignup={toggleAuthMode} />
     {/if}
 {:else}
     <Dashboard {user} />
