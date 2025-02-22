@@ -374,6 +374,10 @@
     display: flex;
     justify-content: center;
   }
+  /* 필요시 MonthDropzone 내부의 컨테이너도 100%로 확장 */
+  :global(.month-single .month-dropzone) {
+    width: 100%;
+  }
   button {
     padding: 0.5rem 1rem;
     cursor: pointer;
