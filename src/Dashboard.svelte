@@ -132,7 +132,7 @@
     localStorage.setItem(cacheKey, JSON.stringify(images));
   }
 
-  // 상태 토글 이벤트 처리: DB 업데이트 후 UI 업데이트
+  // 기존 결제 상태 토글 이벤트 처리
   async function handleStatusToggled(event) {
     const { image, newStatus } = event.detail;
     try {
@@ -141,6 +141,18 @@
       localStorage.setItem(cacheKey, JSON.stringify(images));
     } catch (error) {
       console.error("Status update failed:", error);
+    }
+  }
+
+  // 새 팀 상태 토글 이벤트 처리
+  async function handleTeamStatusToggled(event) {
+    const { image, newTeamStatus } = event.detail;
+    try {
+      await updateDoc(doc(db, "images", image.id), { teamStatus: newTeamStatus });
+      images = images.map(img => img.id === image.id ? { ...img, teamStatus: newTeamStatus } : img);
+      localStorage.setItem(cacheKey, JSON.stringify(images));
+    } catch (error) {
+      console.error("Team status update failed:", error);
     }
   }
 
@@ -168,7 +180,7 @@
 {/if}
 
 <div class="dashboard">
-  <h2>{selectedYear} 이미지 업로드</h2>
+<!--  <h2>{selectedYear} 이미지 업로드</h2>-->
 
   <div class="year-control">
     <button on:click={prevYear} disabled={parseInt(selectedYear) <= startYear}>←</button>
@@ -196,7 +208,8 @@
                 on:imageUploaded={handleImageUpload}
                 on:imageClicked={handleImageClicked}
                 on:imageDelete={handleImageDelete}
-                on:statusToggled={handleStatusToggled} />
+                on:statusToggled={handleStatusToggled}
+                on:teamStatusToggled={handleTeamStatusToggled} />
       {/each}
     </div>
   {:else}
@@ -214,7 +227,8 @@
                 on:imageUploaded={handleImageUpload}
                 on:imageClicked={handleImageClicked}
                 on:imageDelete={handleImageDelete}
-                on:statusToggled={handleStatusToggled} />
+                on:statusToggled={handleStatusToggled}
+                on:teamStatusToggled={handleTeamStatusToggled} />
       </div>
     </div>
   {/if}
@@ -267,7 +281,6 @@
     background-color: #555;
     color: #fff;
   }
-
   .dashboard-loading {
     position: fixed;
     top: 0;
@@ -322,84 +335,31 @@
   }
   .months-grid {
     display: grid;
-    /* 최대 4열로 구성하고, 열이 부족하면 남은 공간에 맞게 늘어남 */
-    grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
+    grid-template-columns: repeat(6, 1fr);
+    /* 전체 너비 100%로 설정하여 가로 스크롤 발생 방지 */
+    max-width: 100%;
   }
 
-  /* 나머지 스타일은 그대로 유지 */
-  .dashboard-header {
-    position: fixed;
-    top: 1rem;
-    left: 1rem;
-    z-index: 100;
+  /* 화면 너비가 좁을 때 최소 2열 유지 */
+  @media (max-width: 1280px) {
+    .months-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
   }
-  .logout-button {
-    padding: 0.5rem 1rem;
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s ease, color 0.3s ease;
+
+  @media (max-width: 680px) {
+    .months-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
-  :global(html.dark) .logout-button {
-    background-color: #555;
-    color: #fff;
+
+  @media (max-width: 480px) {
+    .months-grid {
+      grid-template-columns: repeat(1, 1fr);
+    }
   }
-  .dashboard-loading {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255,255,255,0.8);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 1001;
-  }
-  .spinner {
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3498db;
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  .dashboard {
-    margin: 2rem auto;
-    padding: 1rem;
-    background-color: #fff;
-    color: #333;
-    transition: background-color 0.3s ease, color 0.3s ease;
-  }
-  :global(html.dark) .dashboard {
-    background-color: #1e1e1e;
-    color: #fff;
-  }
-  .year-control {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    transition: color 0.3s ease;
-  }
-  .year-control select {
-    padding: 0.5rem;
-    transition: background-color 0.3s ease, color 0.3s ease;
-  }
-  .view-toggle {
-    text-align: center;
-    margin-bottom: 1rem;
-  }
-  /* single-view 관련 스타일은 그대로 유지 */
+
   .single-view {
     text-align: center;
   }

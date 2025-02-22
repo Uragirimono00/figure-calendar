@@ -13,11 +13,27 @@
 
     let uploading = false;
 
-    // 상태에 따라 CSS 클래스를 결정하는 함수
+    // 기존 결제 상태 목록 (결제 상태)
+    const paymentStatuses = ["예약금", "전액", "꼴림"];
+    // 새로운 팀 상태 목록
+    const teamStatuses = ["코아", "매하", "히탐", "래빗츠", "유메", "위북"];
+
+    // 기존 결제 상태에 따른 CSS 클래스를 반환하는 함수 (좌측 하단)
     function getStatusClass(status) {
         if (status === "예약금") return "status-reserve";
         if (status === "전액") return "status-full";
         if (status === "꼴림") return "status-kkolim";
+        return "";
+    }
+
+    // 새로운 팀 상태에 따른 CSS 클래스를 반환하는 함수 (우측 하단)
+    function getTeamStatusClass(teamStatus) {
+        if (teamStatus === "코아") return "status-koa";
+        if (teamStatus === "매하") return "status-maeha";
+        if (teamStatus === "히탐") return "status-hitam";
+        if (teamStatus === "래빗츠") return "status-rabbits";
+        if (teamStatus === "유메") return "status-yume";
+        if (teamStatus === "위북") return "status-wibuk";
         return "";
     }
 
@@ -32,14 +48,15 @@
             const uploadPromise = uploadBytes(storageRefObj, file)
                 .then(async (snapshot) => {
                     const downloadURL = await getDownloadURL(snapshot.ref);
-                    // 업로드 시 기본 상태는 "예약금"으로 설정
+                    // 업로드 시 기본 결제 상태는 "예약금", 팀 상태는 첫번째 값("코아")로 설정
                     const imageData = {
                         src: downloadURL,
                         month,
                         date: new Date().toISOString(),
                         description: "",
                         uid: userUid,
-                        status: "예약금"
+                        status: "예약금",       // 기존 결제 상태
+                        teamStatus: teamStatuses[0]  // 새로운 팀 상태, 기본 "코아"
                     };
                     const docRef = await addDoc(collection(db, "images"), imageData);
                     const imageDataWithId = { ...imageData, id: docRef.id, storagePath: snapshot.ref.fullPath };
@@ -48,7 +65,6 @@
                 .catch((error) => {
                     console.error("Upload failed", error);
                 });
-
             uploadPromises.push(uploadPromise);
         }
         await Promise.all(uploadPromises);
@@ -89,20 +105,20 @@
         dispatch('imageDelete', { image: img });
     }
 
-    // 상태 토글: "예약금" → "전액" → "꼴림" → "예약금" 순으로 순환
+    // 기존 결제 상태 토글: "예약금" → "전액" → "꼴림" → "예약금"
     function toggleStatus(image, event) {
         event.stopPropagation();
-        let newStatus;
-        if (image.status === "예약금") {
-            newStatus = "전액";
-        } else if (image.status === "전액") {
-            newStatus = "꼴림";
-        } else if (image.status === "꼴림") {
-            newStatus = "예약금";
-        } else {
-            newStatus = "예약금";
-        }
+        let currentIndex = paymentStatuses.indexOf(image.status);
+        let newStatus = paymentStatuses[(currentIndex + 1) % paymentStatuses.length];
         dispatch('statusToggled', { image, newStatus });
+    }
+
+    // 새 팀 상태 토글: "코아" → "매하" → "히탐" → "래빗츠" → "유메" → "위북" → "코아"
+    function toggleTeamStatus(image, event) {
+        event.stopPropagation();
+        let currentIndex = teamStatuses.indexOf(image.teamStatus);
+        let newTeamStatus = teamStatuses[(currentIndex + 1) % teamStatuses.length];
+        dispatch('teamStatusToggled', { image, newTeamStatus });
     }
 </script>
 
@@ -126,9 +142,13 @@
                 <button class="delete-button" on:click={(event) => handleDelete(img, event)} title="이미지 삭제">×</button>
                 <button class="image-button" on:click={(event) => handleImageClick(img, event)}>
                     <img src={img.src} alt="Uploaded image" />
-                    <!-- 상태 띠: 이미지 내부 하단에 오버레이하며, 상태에 따른 클래스가 적용됨 -->
-                    <div class="status-label {getStatusClass(img.status)}" on:click={(event) => toggleStatus(img, event)}>
+                    <!-- 기존 결제 상태: 이미지 내부 왼쪽 하단 -->
+                    <div class="status-label payment-label {getStatusClass(img.status)}" on:click={(event) => toggleStatus(img, event)}>
                         {img.status}
+                    </div>
+                    <!-- 새 팀 상태: 이미지 내부 오른쪽 하단 -->
+                    <div class="status-label team-label {getTeamStatusClass(img.teamStatus)}" on:click={(event) => toggleTeamStatus(img, event)}>
+                        {img.teamStatus}
                     </div>
                 </button>
             </div>
@@ -139,6 +159,13 @@
 </div>
 
 <style>
+    .images-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 0.5rem;
+        margin-top: 1rem;
+        max-width: 100%;
+    }
     .month-dropzone {
         position: relative;
         border: 2px dashed #ccc;
@@ -155,21 +182,13 @@
     :global(html) .month-dropzone {
         color: inherit;
     }
-    /* 다크모드 기본 스타일 */
     :global(html.dark) .month-dropzone {
         background-color: #2c2c2c;
         color: #fff;
     }
-    /* 다크모드 호버 시: 배경은 밝은색, 텍스트는 어두운색으로 변경 */
     :global(html.dark) .month-dropzone:hover {
         background-color: #f0f0f0;
         color: #333;
-    }
-    .images-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-        gap: 0.5rem;
-        margin-top: 1rem;
     }
     .image-container {
         position: relative;
@@ -209,30 +228,63 @@
         object-fit: cover;
         display: block;
     }
-    /* 상태 띠: 이미지 내부 하단에 오버레이 (이미지 크기에 맞게 auto 크기) */
-    .status-label {
+    /* 기존 결제 상태 (왼쪽 하단) */
+    .payment-label {
         position: absolute;
         bottom: 4px;
         left: 4px;
+    }
+    /* 새 팀 상태 (오른쪽 하단) */
+    .team-label {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+    }
+    .status-label {
         padding: 0.2rem 0.5rem;
         font-size: 0.8rem;
         border-radius: 4px;
         transition: background-color 0.3s ease, color 0.3s ease;
     }
-    /* 각 상태별 기본 배경색 (라이트 모드) */
+    /* 결제 상태 색상 (라이트 모드) */
     .status-reserve {
-        background-color: #3498db; /* 예약금: 파란색 */
+        background-color: #3498db;
         color: #fff;
     }
     .status-full {
-        background-color: #27ae60; /* 전액: 초록색 */
+        background-color: #27ae60;
         color: #fff;
     }
     .status-kkolim {
-        background-color: #e67e22; /* 꼴림: 주황색 */
+        background-color: #e67e22;
         color: #fff;
     }
-    /* 다크모드에서 기본 배경색 약간 어둡게 조정 */
+    /* 팀 상태 색상 (라이트 모드) */
+    .status-koa {
+        background-color: #8e44ad;
+        color: #fff;
+    }
+    .status-maeha {
+        background-color: #d35400;
+        color: #fff;
+    }
+    .status-hitam {
+        background-color: #27ae60;
+        color: #fff;
+    }
+    .status-rabbits {
+        background-color: #2980b9;
+        color: #fff;
+    }
+    .status-yume {
+        background-color: #f39c12;
+        color: #fff;
+    }
+    .status-wibuk {
+        background-color: #c0392b;
+        color: #fff;
+    }
+    /* 다크모드 결제 상태 조정 */
     :global(html.dark) .status-reserve {
         background-color: #2980b9;
     }
@@ -241,6 +293,25 @@
     }
     :global(html.dark) .status-kkolim {
         background-color: #d35400;
+    }
+    /* 다크모드 팀 상태 조정 */
+    :global(html.dark) .status-koa {
+        background-color: #7d3c98;
+    }
+    :global(html.dark) .status-maeha {
+        background-color: #ba4a00;
+    }
+    :global(html.dark) .status-hitam {
+        background-color: #229954;
+    }
+    :global(html.dark) .status-rabbits {
+        background-color: #2471a3;
+    }
+    :global(html.dark) .status-yume {
+        background-color: #e67e22;
+    }
+    :global(html.dark) .status-wibuk {
+        background-color: #a93226;
     }
     .hint {
         margin-top: 1rem;

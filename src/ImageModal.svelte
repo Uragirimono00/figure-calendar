@@ -1,17 +1,17 @@
 <!-- src/ImageModal.svelte -->
 <script>
     import { onMount, createEventDispatcher } from 'svelte';
-    export let image; // { id, src, date, description, month, storagePath, status }
+    export let image; // { id, src, date, description, month, storagePath, status, teamStatus }
     const dispatch = createEventDispatcher();
 
     let description = image.description || "";
-    // 기존에 image.status가 없다면 기본값 "예약금"을 사용
     let status = image.status || "예약금";
+    let teamStatus = image.teamStatus || "코아";
     let backdrop;
 
     function save() {
-        // description과 status를 함께 전송
-        dispatch('save', { description, status });
+        // 전달할 때 description, status, teamStatus 모두 포함
+        dispatch('save', { description, status, teamStatus });
     }
 
     function deleteImage() {
@@ -35,14 +35,28 @@
     <div class="modal-content" on:click|stopPropagation>
         <img src={image.src} alt="Uploaded image" />
         <textarea bind:value={description} placeholder="이미지 설명 추가"></textarea>
-        <!-- 상태 선택 UI -->
+
         <div class="status-select">
-            <label>상태:</label>
+            <label>결제 상태:</label>
             <select bind:value={status}>
                 <option value="예약금">예약금</option>
                 <option value="전액">전액</option>
+                <option value="꼴림">꼴림</option>
             </select>
         </div>
+
+        <div class="status-select">
+            <label>팀 상태:</label>
+            <select bind:value={teamStatus}>
+                <option value="코아">코아</option>
+                <option value="매하">매하</option>
+                <option value="히탐">히탐</option>
+                <option value="래빗츠">래빗츠</option>
+                <option value="유메">유메</option>
+                <option value="위북">위북</option>
+            </select>
+        </div>
+
         <div class="modal-buttons">
             <button on:click={save}>저장</button>
             <button on:click={deleteImage}>삭제</button>
