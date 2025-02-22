@@ -1,14 +1,17 @@
 <!-- src/ImageModal.svelte -->
 <script>
     import { onMount, createEventDispatcher } from 'svelte';
-    export let image; // { id, src, date, description, month, storagePath }
+    export let image; // { id, src, date, description, month, storagePath, status }
     const dispatch = createEventDispatcher();
 
     let description = image.description || "";
+    // 기존에 image.status가 없다면 기본값 "예약금"을 사용
+    let status = image.status || "예약금";
     let backdrop;
 
     function save() {
-        dispatch('save', { description });
+        // description과 status를 함께 전송
+        dispatch('save', { description, status });
     }
 
     function deleteImage() {
@@ -32,6 +35,14 @@
     <div class="modal-content" on:click|stopPropagation>
         <img src={image.src} alt="Uploaded image" />
         <textarea bind:value={description} placeholder="이미지 설명 추가"></textarea>
+        <!-- 상태 선택 UI -->
+        <div class="status-select">
+            <label>상태:</label>
+            <select bind:value={status}>
+                <option value="예약금">예약금</option>
+                <option value="전액">전액</option>
+            </select>
+        </div>
         <div class="modal-buttons">
             <button on:click={save}>저장</button>
             <button on:click={deleteImage}>삭제</button>
@@ -69,6 +80,20 @@
         width: 100%;
         height: 80px;
         margin-top: 1rem;
+    }
+    .status-select {
+        margin-top: 0.5rem;
+        display: flex;
+        align-items: center;
+    }
+    .status-select label {
+        margin-right: 0.5rem;
+        font-weight: bold;
+    }
+    .status-select select {
+        padding: 0.3rem;
+        border-radius: 4px;
+        border: 1px solid #ccc;
     }
     .modal-buttons {
         margin-top: 1rem;

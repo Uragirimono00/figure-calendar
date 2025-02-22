@@ -13,6 +13,14 @@
 
     let uploading = false;
 
+    // 상태에 따라 CSS 클래스를 결정하는 함수
+    function getStatusClass(status) {
+        if (status === "예약금") return "status-reserve";
+        if (status === "전액") return "status-full";
+        if (status === "꼴림") return "status-kkolim";
+        return "";
+    }
+
     async function processFiles(files) {
         uploading = true;
         const uploadPromises = [];
@@ -24,12 +32,14 @@
             const uploadPromise = uploadBytes(storageRefObj, file)
                 .then(async (snapshot) => {
                     const downloadURL = await getDownloadURL(snapshot.ref);
+                    // 업로드 시 기본 상태는 "예약금"으로 설정
                     const imageData = {
                         src: downloadURL,
                         month,
                         date: new Date().toISOString(),
                         description: "",
-                        uid: userUid
+                        uid: userUid,
+                        status: "예약금"
                     };
                     const docRef = await addDoc(collection(db, "images"), imageData);
                     const imageDataWithId = { ...imageData, id: docRef.id, storagePath: snapshot.ref.fullPath };
@@ -73,10 +83,26 @@
         dispatch('imageClicked', { image: img });
     }
 
-    // 삭제 버튼 이벤트: X 버튼 클릭 시 삭제 이벤트 전달
+    // 삭제 버튼 이벤트
     function handleDelete(img, event) {
         event.stopPropagation();
         dispatch('imageDelete', { image: img });
+    }
+
+    // 상태 토글: "예약금" → "전액" → "꼴림" → "예약금" 순으로 순환
+    function toggleStatus(image, event) {
+        event.stopPropagation();
+        let newStatus;
+        if (image.status === "예약금") {
+            newStatus = "전액";
+        } else if (image.status === "전액") {
+            newStatus = "꼴림";
+        } else if (image.status === "꼴림") {
+            newStatus = "예약금";
+        } else {
+            newStatus = "예약금";
+        }
+        dispatch('statusToggled', { image, newStatus });
     }
 </script>
 
@@ -100,6 +126,10 @@
                 <button class="delete-button" on:click={(event) => handleDelete(img, event)} title="이미지 삭제">×</button>
                 <button class="image-button" on:click={(event) => handleImageClick(img, event)}>
                     <img src={img.src} alt="Uploaded image" />
+                    <!-- 상태 띠: 이미지 내부 하단에 오버레이하며, 상태에 따른 클래스가 적용됨 -->
+                    <div class="status-label {getStatusClass(img.status)}" on:click={(event) => toggleStatus(img, event)}>
+                        {img.status}
+                    </div>
                 </button>
             </div>
         {/each}
@@ -117,29 +147,24 @@
         text-align: center;
         min-height: 200px;
         cursor: pointer;
-        /* 부드러운 전환 효과 */
         transition: background-color 0.3s ease, color 0.3s ease;
     }
     .month-dropzone:hover {
         background-color: #f9f9f9;
     }
-
-    /* 라이트 모드 기본 스타일은 그대로 사용 */
     :global(html) .month-dropzone {
         color: inherit;
     }
-
     /* 다크모드 기본 스타일 */
     :global(html.dark) .month-dropzone {
         background-color: #2c2c2c;
         color: #fff;
     }
-    /* 다크모드 호버 시: 배경은 밝은색으로, 글자(날짜) 색상은 어두운색으로 변경 */
+    /* 다크모드 호버 시: 배경은 밝은색, 텍스트는 어두운색으로 변경 */
     :global(html.dark) .month-dropzone:hover {
         background-color: #f0f0f0;
         color: #333;
     }
-
     .images-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
@@ -173,6 +198,7 @@
         padding: 0;
         cursor: pointer;
         width: 100%;
+        position: relative;
     }
     .image-button:focus {
         outline: 2px solid blue;
@@ -181,6 +207,40 @@
         width: 100%;
         height: auto;
         object-fit: cover;
+        display: block;
+    }
+    /* 상태 띠: 이미지 내부 하단에 오버레이 (이미지 크기에 맞게 auto 크기) */
+    .status-label {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.8rem;
+        border-radius: 4px;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    /* 각 상태별 기본 배경색 (라이트 모드) */
+    .status-reserve {
+        background-color: #3498db; /* 예약금: 파란색 */
+        color: #fff;
+    }
+    .status-full {
+        background-color: #27ae60; /* 전액: 초록색 */
+        color: #fff;
+    }
+    .status-kkolim {
+        background-color: #e67e22; /* 꼴림: 주황색 */
+        color: #fff;
+    }
+    /* 다크모드에서 기본 배경색 약간 어둡게 조정 */
+    :global(html.dark) .status-reserve {
+        background-color: #2980b9;
+    }
+    :global(html.dark) .status-full {
+        background-color: #1e8449;
+    }
+    :global(html.dark) .status-kkolim {
+        background-color: #d35400;
     }
     .hint {
         margin-top: 1rem;

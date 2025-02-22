@@ -39,7 +39,7 @@
     loadImages();
   });
 
-  // images 배열을 월별로 그룹화 (각 항목에 고유 키 사용)
+  // 이미지를 월별로 그룹화
   $: groupedImages = groupByMonth(images);
   function groupByMonth(images) {
     const groups = {};
@@ -91,11 +91,12 @@
   }
 
   async function handleModalSave(event) {
-    const { description } = event.detail;
+    const { description, status } = event.detail;
     modalImage.description = description;
+    modalImage.status = status;
     images = [...images];
     try {
-      await updateDoc(doc(db, "images", modalImage.id), { description });
+      await updateDoc(doc(db, "images", modalImage.id), { description, status });
     } catch (error) {
       console.error("설명 업데이트 실패:", error);
     }
@@ -131,6 +132,18 @@
     localStorage.setItem(cacheKey, JSON.stringify(images));
   }
 
+  // 상태 토글 이벤트 처리: DB 업데이트 후 UI 업데이트
+  async function handleStatusToggled(event) {
+    const { image, newStatus } = event.detail;
+    try {
+      await updateDoc(doc(db, "images", image.id), { status: newStatus });
+      images = images.map(img => img.id === image.id ? { ...img, status: newStatus } : img);
+      localStorage.setItem(cacheKey, JSON.stringify(images));
+    } catch (error) {
+      console.error("Status update failed:", error);
+    }
+  }
+
   async function handleLogout() {
     try {
       await signOut(auth);
@@ -140,7 +153,7 @@
   }
 </script>
 
-<!-- 로그인 상태일 때 상단 왼쪽 고정된 로그아웃 버튼 -->
+<!-- 상단 왼쪽 고정된 로그아웃 버튼 -->
 {#if user}
   <header class="dashboard-header">
     <button on:click={handleLogout} class="logout-button">로그아웃</button>
@@ -182,7 +195,8 @@
                 images={groupedImages[monthKey] || []}
                 on:imageUploaded={handleImageUpload}
                 on:imageClicked={handleImageClicked}
-                on:imageDelete={handleImageDelete} />
+                on:imageDelete={handleImageDelete}
+                on:statusToggled={handleStatusToggled} />
       {/each}
     </div>
   {:else}
@@ -199,7 +213,8 @@
                 images={groupedImages[months[currentMonthIndex]] || []}
                 on:imageUploaded={handleImageUpload}
                 on:imageClicked={handleImageClicked}
-                on:imageDelete={handleImageDelete} />
+                on:imageDelete={handleImageDelete}
+                on:statusToggled={handleStatusToggled} />
       </div>
     </div>
   {/if}
@@ -211,24 +226,24 @@
           on:save={handleModalSave}
           on:close={handleModalClose}
           on:delete={(e) => {
-      const { id, storagePath } = e.detail;
-      (async () => {
-        try {
-          await deleteDoc(doc(db, "images", id));
-          if (storagePath) {
-            const sRef = storageRef(storage, storagePath);
-            await deleteObject(sRef);
-          }
-          images = images.filter(img => img.id !== id);
-          localStorage.setItem(cacheKey, JSON.stringify(images));
-          await tick();
-          modalVisible = false;
-          modalImage = null;
-        } catch (error) {
-          console.error("모달 이미지 삭제 실패:", error);
-        }
-      })();
-    }} />
+              const { id, storagePath } = e.detail;
+              (async () => {
+                try {
+                  await deleteDoc(doc(db, "images", id));
+                  if (storagePath) {
+                    const sRef = storageRef(storage, storagePath);
+                    await deleteObject(sRef);
+                  }
+                  images = images.filter(img => img.id !== id);
+                  localStorage.setItem(cacheKey, JSON.stringify(images));
+                  await tick();
+                  modalVisible = false;
+                  modalImage = null;
+                } catch (error) {
+                  console.error("모달 이미지 삭제 실패:", error);
+                }
+              })();
+            }} />
 {/if}
 
 <style>
