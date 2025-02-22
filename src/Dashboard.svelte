@@ -108,13 +108,11 @@
     modalImage = null;
   }
 
-  // 삭제 후 강제로 상태 업데이트 (tick() 사용)
   async function handleImageDelete(event) {
     const { image } = event.detail;
     if (confirm("이미지를 삭제하시겠습니까?")) {
       try {
         await deleteDoc(doc(db, "images", image.id));
-        // storagePath가 존재할 경우에만 삭제 시도
         if (image.storagePath) {
           const sRef = storageRef(storage, image.storagePath);
           await deleteObject(sRef);
@@ -142,10 +140,12 @@
   }
 </script>
 
-<!-- 헤더: 로그아웃 버튼만 표시 -->
-<header class="dashboard-header">
-  <button on:click={handleLogout} class="logout-button">로그아웃</button>
-</header>
+<!-- 로그인 상태일 때 상단 왼쪽 고정된 로그아웃 버튼 -->
+{#if user}
+  <header class="dashboard-header">
+    <button on:click={handleLogout} class="logout-button">로그아웃</button>
+  </header>
+{/if}
 
 {#if imagesLoading}
   <div class="dashboard-loading">
@@ -231,15 +231,13 @@
     }} />
 {/if}
 
-
 <style>
+  /* 상단 왼쪽 고정 헤더 */
   .dashboard-header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 1rem;
-    /*background-color: #f3f3f3;*/
-    /*border-bottom: 1px solid #ccc;*/
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 100;
   }
   .logout-button {
     padding: 0.5rem 1rem;
@@ -248,7 +246,13 @@
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
+  :global(html.dark) .logout-button {
+    background-color: #555;
+    color: #fff;
+  }
+
   .dashboard-loading {
     position: fixed;
     top: 0;
@@ -278,6 +282,13 @@
     max-width: 1200px;
     margin: 2rem auto;
     padding: 1rem;
+    background-color: #fff;
+    color: #333;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  :global(html.dark) .dashboard {
+    background-color: #1e1e1e;
+    color: #fff;
   }
   .year-control {
     display: flex;
@@ -285,9 +296,11 @@
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 1rem;
+    transition: color 0.3s ease;
   }
   .year-control select {
     padding: 0.5rem;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   .view-toggle {
     text-align: center;
@@ -315,5 +328,20 @@
   button {
     padding: 0.5rem 1rem;
     cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  .dashboard h2,
+  .year-control,
+  .hint {
+    color: inherit;
+  }
+  .year-control select,
+  .year-control button {
+    color: inherit;
+    background-color: transparent;
+    border: 1px solid currentColor;
+  }
+  :global(html.dark) .year-control select {
+    background-color: #333;
   }
 </style>

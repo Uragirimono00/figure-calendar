@@ -117,10 +117,29 @@
         text-align: center;
         min-height: 200px;
         cursor: pointer;
+        /* 부드러운 전환 효과 */
+        transition: background-color 0.3s ease, color 0.3s ease;
     }
     .month-dropzone:hover {
         background-color: #f9f9f9;
     }
+
+    /* 라이트 모드 기본 스타일은 그대로 사용 */
+    :global(html) .month-dropzone {
+        color: inherit;
+    }
+
+    /* 다크모드 기본 스타일 */
+    :global(html.dark) .month-dropzone {
+        background-color: #2c2c2c;
+        color: #fff;
+    }
+    /* 다크모드 호버 시: 배경은 밝은색으로, 글자(날짜) 색상은 어두운색으로 변경 */
+    :global(html.dark) .month-dropzone:hover {
+        background-color: #f0f0f0;
+        color: #333;
+    }
+
     .images-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));

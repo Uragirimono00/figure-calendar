@@ -58,6 +58,7 @@
     align-items: center;
     height: 100vh;
     background: #f2f2f2;
+    transition: background 0.3s ease;
   }
   .login-form {
     background: #fff;
@@ -68,11 +69,13 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    transition: background 0.3s ease, color 0.3s ease;
   }
   .login-form h2 {
     margin-bottom: 1rem;
     font-size: 1.5rem;
     color: #333;
+    transition: color 0.3s ease;
   }
   .login-form input {
     width: 100%;
@@ -81,6 +84,7 @@
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 1rem;
+    transition: background 0.3s ease, color 0.3s ease;
   }
   .login-form button {
     width: 100%;
@@ -112,6 +116,7 @@
     font-size: 0.9rem;
     color: #666;
     margin-top: 1rem;
+    transition: color 0.3s ease;
   }
   .switch a {
     color: #3498db;
@@ -120,5 +125,35 @@
   }
   .switch a:hover {
     text-decoration: underline;
+  }
+
+  /* 다크모드 적용 */
+  :global(html.dark) .login-container {
+    background: #121212;
+  }
+  :global(html.dark) .login-form {
+    background: #2c2c2c;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  }
+  :global(html.dark) .login-form h2 {
+    color: #fff;
+  }
+  :global(html.dark) .login-form input {
+    background: #333;
+    border: 1px solid #555;
+    color: #fff;
+  }
+  :global(html.dark) .login-form button {
+    background-color: #555;
+  }
+  :global(html.dark) .login-form button:hover {
+    background-color: #777;
+  }
+  :global(html.dark) .switch {
+    color: #aaa;
+  }
+  :global(html.dark) .switch a {
+    color: #81a1c1;
   }
 </style>
