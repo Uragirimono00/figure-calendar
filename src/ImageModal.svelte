@@ -1,4 +1,3 @@
-<!-- src/ImageModal.svelte -->
 <script>
     import { onMount, createEventDispatcher } from 'svelte';
     export let image; // { id, src, date, description, month, storagePath, status, teamStatus }
@@ -10,7 +9,6 @@
     let backdrop;
 
     function save() {
-        // 전달할 때 description, status, teamStatus 모두 포함
         dispatch('save', { description, status, teamStatus });
     }
 

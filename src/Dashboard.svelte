@@ -1,4 +1,3 @@
-<!-- src/Dashboard.svelte -->
 <script>
   import { onMount, tick } from 'svelte';
   import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -91,12 +90,13 @@
   }
 
   async function handleModalSave(event) {
-    const { description, status } = event.detail;
+    const { description, status, teamStatus } = event.detail;
     modalImage.description = description;
     modalImage.status = status;
+    modalImage.teamStatus = teamStatus;
     images = [...images];
     try {
-      await updateDoc(doc(db, "images", modalImage.id), { description, status });
+      await updateDoc(doc(db, "images", modalImage.id), { description, status, teamStatus });
     } catch (error) {
       console.error("설명 업데이트 실패:", error);
     }
@@ -163,9 +163,24 @@
       console.error("로그아웃 실패:", error);
     }
   }
+
+  // 이미지 이동 이벤트 핸들러 (드래그앤드롭)
+  async function handleImageMoved(event) {
+    const { id, fromMonth, toMonth } = event.detail;
+    const imageToMove = images.find(img => img.id === id);
+    if (imageToMove) {
+      try {
+        await updateDoc(doc(db, "images", id), { month: toMonth });
+        imageToMove.month = toMonth;
+        images = [...images];
+        localStorage.setItem(cacheKey, JSON.stringify(images));
+      } catch (error) {
+        console.error("이미지 이동 실패:", error);
+      }
+    }
+  }
 </script>
 
-<!-- 상단 왼쪽 고정된 로그아웃 버튼 -->
 {#if user}
   <header class="dashboard-header">
     <button on:click={handleLogout} class="logout-button">로그아웃</button>
@@ -180,8 +195,6 @@
 {/if}
 
 <div class="dashboard">
-<!--  <h2>{selectedYear} 이미지 업로드</h2>-->
-
   <div class="year-control">
     <button on:click={prevYear} disabled={parseInt(selectedYear) <= startYear}>←</button>
     <select bind:value={selectedYear}>
@@ -209,8 +222,21 @@
                 on:imageClicked={handleImageClicked}
                 on:imageDelete={handleImageDelete}
                 on:statusToggled={handleStatusToggled}
-                on:teamStatusToggled={handleTeamStatusToggled} />
+                on:teamStatusToggled={handleTeamStatusToggled}
+                on:imageMoved={handleImageMoved} />
       {/each}
+      <!-- 항상 보이는 "미정" 칸 -->
+      <MonthDropzone
+              month="미정"
+              userUid={user.uid}
+              images={groupedImages["미정"] || []}
+              on:imageUploaded={handleImageUpload}
+              on:imageClicked={handleImageClicked}
+              on:imageDelete={handleImageDelete}
+              on:statusToggled={handleStatusToggled}
+              on:teamStatusToggled={handleTeamStatusToggled}
+              on:imageMoved={handleImageMoved} />
+
     </div>
   {:else}
     <div class="single-view">
@@ -228,7 +254,8 @@
                 on:imageClicked={handleImageClicked}
                 on:imageDelete={handleImageDelete}
                 on:statusToggled={handleStatusToggled}
-                on:teamStatusToggled={handleTeamStatusToggled} />
+                on:teamStatusToggled={handleTeamStatusToggled}
+                on:imageMoved={handleImageMoved} />
       </div>
     </div>
   {/if}
@@ -261,7 +288,6 @@
 {/if}
 
 <style>
-  /* 상단 왼쪽 고정 헤더 */
   .dashboard-header {
     position: fixed;
     top: 1rem;
@@ -337,29 +363,23 @@
     display: grid;
     gap: 1rem;
     grid-template-columns: repeat(6, 1fr);
-    /* 전체 너비 100%로 설정하여 가로 스크롤 발생 방지 */
     max-width: 100%;
   }
-
-  /* 화면 너비가 좁을 때 최소 2열 유지 */
   @media (max-width: 1280px) {
     .months-grid {
       grid-template-columns: repeat(3, 1fr);
     }
   }
-
   @media (max-width: 680px) {
     .months-grid {
       grid-template-columns: repeat(2, 1fr);
     }
   }
-
   @media (max-width: 480px) {
     .months-grid {
       grid-template-columns: repeat(1, 1fr);
     }
   }
-
   .single-view {
     text-align: center;
   }
@@ -374,7 +394,6 @@
     display: flex;
     justify-content: center;
   }
-  /* 필요시 MonthDropzone 내부의 컨테이너도 100%로 확장 */
   :global(.month-single .month-dropzone) {
     width: 100%;
   }

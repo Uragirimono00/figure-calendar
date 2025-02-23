@@ -1,4 +1,3 @@
-<!-- src/MonthDropzone.svelte -->
 <script>
     import { createEventDispatcher } from 'svelte';
     import { storage, db } from './firebase.js';
@@ -13,12 +12,12 @@
 
     let uploading = false;
 
-    // 기존 결제 상태 목록 (결제 상태)
+    // 기존 결제 상태 목록
     const paymentStatuses = ["예약금", "전액", "꼴림"];
     // 새로운 팀 상태 목록
     const teamStatuses = ["코아", "매하", "히탐", "래빗츠", "유메", "위북"];
 
-    // 기존 결제 상태에 따른 CSS 클래스를 반환하는 함수 (좌측 하단)
+    // 결제 상태에 따른 CSS 클래스 반환
     function getStatusClass(status) {
         if (status === "예약금") return "status-reserve";
         if (status === "전액") return "status-full";
@@ -26,7 +25,7 @@
         return "";
     }
 
-    // 새로운 팀 상태에 따른 CSS 클래스를 반환하는 함수 (우측 하단)
+    // 팀 상태에 따른 CSS 클래스 반환
     function getTeamStatusClass(teamStatus) {
         if (teamStatus === "코아") return "status-koa";
         if (teamStatus === "매하") return "status-maeha";
@@ -48,15 +47,15 @@
             const uploadPromise = uploadBytes(storageRefObj, file)
                 .then(async (snapshot) => {
                     const downloadURL = await getDownloadURL(snapshot.ref);
-                    // 업로드 시 기본 결제 상태는 "예약금", 팀 상태는 첫번째 값("코아")로 설정
+                    // 업로드 시 기본 결제 상태는 "예약금", 팀 상태는 "코아"로 설정
                     const imageData = {
                         src: downloadURL,
                         month,
                         date: new Date().toISOString(),
                         description: "",
                         uid: userUid,
-                        status: "예약금",       // 기존 결제 상태
-                        teamStatus: teamStatuses[0]  // 새로운 팀 상태, 기본 "코아"
+                        status: "예약금",
+                        teamStatus: teamStatuses[0]
                     };
                     const docRef = await addDoc(collection(db, "images"), imageData);
                     const imageDataWithId = { ...imageData, id: docRef.id, storagePath: snapshot.ref.fullPath };
@@ -79,9 +78,23 @@
     function handleDrop(event) {
         event.preventDefault();
         event.stopPropagation();
-        const files = event.dataTransfer.files;
-        processFiles(files);
-        event.dataTransfer.clearData();
+
+        const fileList = event.dataTransfer.files;
+        if (fileList && fileList.length > 0) {
+            processFiles(fileList);
+            event.dataTransfer.clearData();
+            return;
+        }
+
+        try {
+            const jsonData = event.dataTransfer.getData('application/json');
+            if (jsonData) {
+                const data = JSON.parse(jsonData);
+                dispatch('imageMoved', { id: data.id, fromMonth: data.fromMonth, toMonth: month });
+            }
+        } catch (error) {
+            console.error("드래그 데이터 파싱 실패:", error);
+        }
     }
 
     function handleFileChange(event) {
@@ -99,13 +112,11 @@
         dispatch('imageClicked', { image: img });
     }
 
-    // 삭제 버튼 이벤트
     function handleDelete(img, event) {
         event.stopPropagation();
         dispatch('imageDelete', { image: img });
     }
 
-    // 기존 결제 상태 토글: "예약금" → "전액" → "꼴림" → "예약금"
     function toggleStatus(image, event) {
         event.stopPropagation();
         let currentIndex = paymentStatuses.indexOf(image.status);
@@ -113,12 +124,15 @@
         dispatch('statusToggled', { image, newStatus });
     }
 
-    // 새 팀 상태 토글: "코아" → "매하" → "히탐" → "래빗츠" → "유메" → "위북" → "코아"
     function toggleTeamStatus(image, event) {
         event.stopPropagation();
         let currentIndex = teamStatuses.indexOf(image.teamStatus);
         let newTeamStatus = teamStatuses[(currentIndex + 1) % teamStatuses.length];
         dispatch('teamStatusToggled', { image, newTeamStatus });
+    }
+
+    function handleImageDragStart(img, event) {
+        event.dataTransfer.setData('application/json', JSON.stringify({ id: img.id, fromMonth: month }));
     }
 </script>
 
@@ -138,15 +152,15 @@
 
     <div class="images-grid">
         {#each images as img (img.id)}
-            <div class="image-container">
+            <div class="image-container"
+                 draggable="true"
+                 on:dragstart={(event) => handleImageDragStart(img, event)}>
                 <button class="delete-button" on:click={(event) => handleDelete(img, event)} title="이미지 삭제">×</button>
                 <button class="image-button" on:click={(event) => handleImageClick(img, event)}>
                     <img src={img.src} alt="Uploaded image" />
-                    <!-- 기존 결제 상태: 이미지 내부 왼쪽 하단 -->
                     <div class="status-label payment-label {getStatusClass(img.status)}" on:click={(event) => toggleStatus(img, event)}>
                         {img.status}
                     </div>
-                    <!-- 새 팀 상태: 이미지 내부 오른쪽 하단 -->
                     <div class="status-label team-label {getTeamStatusClass(img.teamStatus)}" on:click={(event) => toggleTeamStatus(img, event)}>
                         {img.teamStatus}
                     </div>
@@ -228,13 +242,11 @@
         object-fit: cover;
         display: block;
     }
-    /* 기존 결제 상태 (왼쪽 하단) */
     .payment-label {
         position: absolute;
         bottom: 4px;
         left: 4px;
     }
-    /* 새 팀 상태 (오른쪽 하단) */
     .team-label {
         position: absolute;
         bottom: 4px;
@@ -246,7 +258,6 @@
         border-radius: 4px;
         transition: background-color 0.3s ease, color 0.3s ease;
     }
-    /* 결제 상태 색상 (라이트 모드) */
     .status-reserve {
         background-color: #3498db;
         color: #fff;
@@ -259,7 +270,6 @@
         background-color: #e67e22;
         color: #fff;
     }
-    /* 팀 상태 색상 (라이트 모드) */
     .status-koa {
         background-color: #8e44ad;
         color: #fff;
@@ -284,7 +294,6 @@
         background-color: #c0392b;
         color: #fff;
     }
-    /* 다크모드 결제 상태 조정 */
     :global(html.dark) .status-reserve {
         background-color: #2980b9;
     }
@@ -294,7 +303,6 @@
     :global(html.dark) .status-kkolim {
         background-color: #d35400;
     }
-    /* 다크모드 팀 상태 조정 */
     :global(html.dark) .status-koa {
         background-color: #7d3c98;
     }
