@@ -14,8 +14,8 @@
 
     // 기존 결제 상태 목록
     const paymentStatuses = ["예약금", "전액", "꼴림"];
-    // 새로운 팀 상태 목록
-    const teamStatuses = ["코아", "매하", "히탐", "래빗츠", "유메", "위북"];
+    // 새로운 팀 상태 목록 (드리머 추가)
+    const teamStatuses = ["코아", "매하", "히탐", "래빗츠", "유메", "위북", "드리머"];
 
     // 결제 상태에 따른 CSS 클래스 반환
     function getStatusClass(status) {
@@ -33,6 +33,7 @@
         if (teamStatus === "래빗츠") return "status-rabbits";
         if (teamStatus === "유메") return "status-yume";
         if (teamStatus === "위북") return "status-wibuk";
+        if (teamStatus === "드리머") return "status-dreamer";
         return "";
     }
 
@@ -294,6 +295,10 @@
         background-color: #c0392b;
         color: #fff;
     }
+    .status-dreamer {
+        background-color: #e91e63;
+        color: #fff;
+    }
     :global(html.dark) .status-reserve {
         background-color: #2980b9;
     }
@@ -320,6 +325,9 @@
     }
     :global(html.dark) .status-wibuk {
         background-color: #a93226;
+    }
+    :global(html.dark) .status-dreamer {
+        background-color: #c2185b;
     }
     .hint {
         margin-top: 1rem;
