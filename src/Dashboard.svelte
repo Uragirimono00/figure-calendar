@@ -6,11 +6,15 @@
   import MonthDropzone from './MonthDropzone.svelte';
   import ImageModal from './ImageModal.svelte';
   import { signOut } from 'firebase/auth';
+  import domtoimage from 'dom-to-image';
 
   export let user;
   let images = [];
   let imagesLoading = true;
   $: cacheKey = `cachedImages-${user.uid}`;
+
+  // 다운로드 진행 상태 플래그
+  let downloading = false;
 
   async function loadImages() {
     imagesLoading = true;
@@ -132,7 +136,6 @@
     localStorage.setItem(cacheKey, JSON.stringify(images));
   }
 
-  // 기존 결제 상태 토글 이벤트 처리
   async function handleStatusToggled(event) {
     const { image, newStatus } = event.detail;
     try {
@@ -144,7 +147,6 @@
     }
   }
 
-  // 새 팀 상태 토글 이벤트 처리
   async function handleTeamStatusToggled(event) {
     const { image, newTeamStatus } = event.detail;
     try {
@@ -164,7 +166,6 @@
     }
   }
 
-  // 이미지 이동 이벤트 핸들러 (드래그앤드롭)
   async function handleImageMoved(event) {
     const { id, fromMonth, toMonth } = event.detail;
     const imageToMove = images.find(img => img.id === id);
@@ -179,11 +180,39 @@
       }
     }
   }
+
+  // 캡처 대상 영역(.capture-area)만 이미지로 저장
+  async function saveDashboardImage() {
+    downloading = true;
+    const captureArea = document.querySelector('.capture-area');
+    if (!captureArea) {
+      downloading = false;
+      return;
+    }
+    try {
+      const dataUrl = await domtoimage.toPng(captureArea, { cacheBust: true });
+      const link = document.createElement('a');
+      link.download = `dashboard_${new Date().toISOString()}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error("이미지 저장 실패:", error);
+    }
+    downloading = false;
+  }
 </script>
 
 {#if user}
   <header class="dashboard-header">
     <button on:click={handleLogout} class="logout-button">로그아웃</button>
+    <button on:click={saveDashboardImage} class="save-image-button" disabled={downloading}>
+      {#if downloading}
+        <span class="spinner-button"></span>
+        저장중...
+      {:else}
+        대시보드 이미지 저장
+      {/if}
+    </button>
   </header>
 {/if}
 
@@ -195,6 +224,7 @@
 {/if}
 
 <div class="dashboard">
+  <!-- 날짜 선택, 뷰 전환 등은 캡처 대상에서 제외 -->
   <div class="year-control">
     <button on:click={prevYear} disabled={parseInt(selectedYear) <= startYear}>←</button>
     <select bind:value={selectedYear}>
@@ -211,45 +241,27 @@
     </button>
   </div>
 
-  {#if viewMode === 'grid'}
-    <div class="months-grid">
-      {#each months as monthKey}
+  <!-- 캡처할 영역: 카드(달력)만 포함 -->
+  <div class="capture-area">
+    {#if viewMode === 'grid'}
+      <div class="months-grid">
+        {#each months as monthKey}
+          <MonthDropzone
+                  month={monthKey}
+                  userUid={user.uid}
+                  images={groupedImages[monthKey] || []}
+                  on:imageUploaded={handleImageUpload}
+                  on:imageClicked={handleImageClicked}
+                  on:imageDelete={handleImageDelete}
+                  on:statusToggled={handleStatusToggled}
+                  on:teamStatusToggled={handleTeamStatusToggled}
+                  on:imageMoved={handleImageMoved} />
+        {/each}
+        <!-- 항상 보이는 "미정" 칸 -->
         <MonthDropzone
-                month={monthKey}
+                month="미정"
                 userUid={user.uid}
-                images={groupedImages[monthKey] || []}
-                on:imageUploaded={handleImageUpload}
-                on:imageClicked={handleImageClicked}
-                on:imageDelete={handleImageDelete}
-                on:statusToggled={handleStatusToggled}
-                on:teamStatusToggled={handleTeamStatusToggled}
-                on:imageMoved={handleImageMoved} />
-      {/each}
-      <!-- 항상 보이는 "미정" 칸 -->
-      <MonthDropzone
-              month="미정"
-              userUid={user.uid}
-              images={groupedImages["미정"] || []}
-              on:imageUploaded={handleImageUpload}
-              on:imageClicked={handleImageClicked}
-              on:imageDelete={handleImageDelete}
-              on:statusToggled={handleStatusToggled}
-              on:teamStatusToggled={handleTeamStatusToggled}
-              on:imageMoved={handleImageMoved} />
-
-    </div>
-  {:else}
-    <div class="single-view">
-      <div class="navigation">
-        <button on:click={prevMonth} disabled={currentMonthIndex === 0}>←</button>
-        <span>{months[currentMonthIndex]}</span>
-        <button on:click={nextMonth} disabled={currentMonthIndex === months.length - 1}>→</button>
-      </div>
-      <div class="month-single">
-        <MonthDropzone
-                month={months[currentMonthIndex]}
-                userUid={user.uid}
-                images={groupedImages[months[currentMonthIndex]] || []}
+                images={groupedImages["미정"] || []}
                 on:imageUploaded={handleImageUpload}
                 on:imageClicked={handleImageClicked}
                 on:imageDelete={handleImageDelete}
@@ -257,8 +269,28 @@
                 on:teamStatusToggled={handleTeamStatusToggled}
                 on:imageMoved={handleImageMoved} />
       </div>
-    </div>
-  {/if}
+    {:else}
+      <div class="single-view">
+        <div class="navigation">
+          <button on:click={prevMonth} disabled={currentMonthIndex === 0}>←</button>
+          <span>{months[currentMonthIndex]}</span>
+          <button on:click={nextMonth} disabled={currentMonthIndex === months.length - 1}>→</button>
+        </div>
+        <div class="month-single">
+          <MonthDropzone
+                  month={months[currentMonthIndex]}
+                  userUid={user.uid}
+                  images={groupedImages[months[currentMonthIndex]] || []}
+                  on:imageUploaded={handleImageUpload}
+                  on:imageClicked={handleImageClicked}
+                  on:imageDelete={handleImageDelete}
+                  on:statusToggled={handleStatusToggled}
+                  on:teamStatusToggled={handleTeamStatusToggled}
+                  on:imageMoved={handleImageMoved} />
+        </div>
+      </div>
+    {/if}
+  </div>
 </div>
 
 {#if modalVisible}
@@ -267,24 +299,24 @@
           on:save={handleModalSave}
           on:close={handleModalClose}
           on:delete={(e) => {
-              const { id, storagePath } = e.detail;
-              (async () => {
-                try {
-                  await deleteDoc(doc(db, "images", id));
-                  if (storagePath) {
-                    const sRef = storageRef(storage, storagePath);
-                    await deleteObject(sRef);
-                  }
-                  images = images.filter(img => img.id !== id);
-                  localStorage.setItem(cacheKey, JSON.stringify(images));
-                  await tick();
-                  modalVisible = false;
-                  modalImage = null;
-                } catch (error) {
-                  console.error("모달 이미지 삭제 실패:", error);
-                }
-              })();
-            }} />
+      const { id, storagePath } = e.detail;
+      (async () => {
+        try {
+          await deleteDoc(doc(db, "images", id));
+          if (storagePath) {
+            const sRef = storageRef(storage, storagePath);
+            await deleteObject(sRef);
+          }
+          images = images.filter(img => img.id !== id);
+          localStorage.setItem(cacheKey, JSON.stringify(images));
+          await tick();
+          modalVisible = false;
+          modalImage = null;
+        } catch (error) {
+          console.error("모달 이미지 삭제 실패:", error);
+        }
+      })();
+    }} />
 {/if}
 
 <style>
@@ -292,7 +324,11 @@
     position: fixed;
     top: 1rem;
     left: 1rem;
-    z-index: 100;
+    right: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    /*z-index: 100;*/
   }
   .logout-button {
     padding: 0.5rem 1rem;
@@ -306,6 +342,37 @@
   :global(html.dark) .logout-button {
     background-color: #555;
     color: #fff;
+  }
+  .save-image-button {
+    padding: 0.5rem 1rem;
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    /*margin-left: auto;*/
+    display: flex;
+    align-items: center;
+  }
+  .save-image-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+  .spinner-button {
+    border: 2px solid #fff;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
   .dashboard-loading {
     position: fixed;
@@ -327,10 +394,6 @@
     width: 60px;
     height: 60px;
     animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
   }
   .dashboard {
     margin: 2rem auto;
@@ -415,5 +478,16 @@
   }
   :global(html.dark) .year-control select {
     background-color: #333;
+  }
+  /* capture-area: 캡처 대상 영역 (카드 부분) */
+  .capture-area {
+    background-color: #fff;
+    padding: 1rem;
+    color: #333;
+  }
+
+  :global(html.dark) .capture-area {
+    background-color: #1e1e1e;
+    color: #fff;
   }
 </style>
