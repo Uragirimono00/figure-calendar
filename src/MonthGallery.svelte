@@ -1,3 +1,4 @@
+<!-- src/MonthGallery.svelte -->
 <script>
   export let month = '';
   export let images = [];

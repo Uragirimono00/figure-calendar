@@ -1,3 +1,4 @@
+<!-- src/MonthDropzone.svelte -->
 <script>
     import { createEventDispatcher } from 'svelte';
     import { storage, db } from './firebase.js';

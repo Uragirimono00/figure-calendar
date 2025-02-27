@@ -52,12 +52,7 @@
     }
 </script>
 
-<header>
-    <button on:click={toggleDarkMode}>
-        {#if darkMode} 라이트 모드로 전환 {:else} 다크 모드로 전환 {/if}
-    </button>
-</header>
-
+<!-- 기존 헤더 영역 (필요에 따라 남기거나 제거 가능) -->
 {#if !user}
     {#if showSignup}
         <Signup on:authSuccess={handleAuthSuccess} on:showLogin={toggleAuthMode} />
@@ -68,37 +63,45 @@
     <Dashboard {user} />
 {/if}
 
+<!-- 오른쪽 하단에 다크모드 전환 아이콘 버튼 -->
+<button class="toggle-dark-mode" on:click={toggleDarkMode}>
+    {#if darkMode}
+        <!-- 다크모드 상태이면 라이트모드로 전환할 수 있도록 태양 아이콘 표시 -->
+        🌞
+    {:else}
+        <!-- 라이트모드 상태이면 다크모드로 전환할 수 있도록 달 아이콘 표시 -->
+        🌜
+    {/if}
+</button>
+
 <style>
-    header {
-        position: fixed;
-        top: 1rem;
-        right: 1rem;
-        z-index: 100;
+    /* 기존 .totals CSS (이미 변경한 내용) */
+    .totals {
+        display: flex;
+        gap: 1rem;
+        font-weight: bold;
     }
-    header button {
-        padding: 0.5rem 1rem;
-        border: none;
-        border-radius: 4px;
+
+    /* 오른쪽 하단에 고정된 다크모드 토글 버튼 */
+    .toggle-dark-mode {
+        position: fixed;
+        bottom: 1rem;
+        right: 1rem;
         background-color: #3498db;
-        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 3rem;
+        height: 3rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
+        font-size: 1.5rem;
+        color: #fff;
+        z-index: 100;
         transition: background-color 0.3s ease;
     }
-    header button:hover {
+    .toggle-dark-mode:hover {
         background-color: #2980b9;
-    }
-    /* 라이트 모드 기본 스타일 */
-    :global(html) {
-        background-color: #f2f2f2;
-        color: #333;
-    }
-    /* 다크모드 스타일 */
-    :global(html.dark) {
-        background-color: #121212;
-        color: #fff; /* 글자색을 흰색으로 변경 */
-    }
-    :global(html.dark) button {
-        background-color: #555;
-        color: #fff;
     }
 </style>

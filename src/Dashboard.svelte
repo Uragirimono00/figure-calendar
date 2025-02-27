@@ -1,5 +1,7 @@
+<!-- src/Dashboard.svelte -->
 <script>
   import { onMount, tick } from 'svelte';
+  import { fly } from 'svelte/transition';
   import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
   import { deleteObject, ref as storageRef } from 'firebase/storage';
   import { db, storage, auth } from './firebase.js';
@@ -94,18 +96,28 @@
   }
 
   async function handleModalSave(event) {
-    const { description, status, teamStatus } = event.detail;
+    const { description, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate, purchasePlace } = event.detail;
+    // 모달 내 상태 업데이트
     modalImage.description = description;
     modalImage.status = status;
     modalImage.teamStatus = teamStatus;
+    modalImage.type = type;
+    modalImage.size = size;
+    modalImage.price = price;
+    modalImage.remaining = remaining;
+    modalImage.expectedCustoms = expectedCustoms;
+    modalImage.purchaseDate = purchaseDate;
+    modalImage.purchasePlace = purchasePlace;
+
     images = [...images];
+
     try {
-      await updateDoc(doc(db, "images", modalImage.id), { description, status, teamStatus });
+      await updateDoc(doc(db, "images", modalImage.id), {
+        description, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate, purchasePlace
+      });
     } catch (error) {
-      console.error("설명 업데이트 실패:", error);
+      console.error("저장 실패:", error);
     }
-    modalVisible = false;
-    modalImage = null;
   }
 
   function handleModalClose() {
@@ -181,7 +193,6 @@
     }
   }
 
-  // 캡처 대상 영역(.capture-area)만 이미지로 저장
   async function saveDashboardImage() {
     downloading = true;
     const captureArea = document.querySelector('.capture-area');
@@ -200,20 +211,49 @@
     }
     downloading = false;
   }
+
+  // 사이드바 표시 여부 및 토글 함수
+  let sidebarVisible = false;
+  function toggleSidebar() {
+    sidebarVisible = !sidebarVisible;
+  }
+
+  // 총합 계산 (각 필드를 숫자로 변환)
+  $: totalPrice = images.reduce((sum, img) => sum + (Number(img.price) || 0), 0);
+  $: totalRemaining = images.reduce((sum, img) => sum + (Number(img.remaining) || 0), 0);
+  $: totalCustoms = images.reduce((sum, img) => sum + (Number(img.expectedCustoms) || 0), 0);
+  $: overallTotal = totalPrice + totalRemaining + totalCustoms;
 </script>
 
 {#if user}
   <header class="dashboard-header">
-    <button on:click={handleLogout} class="logout-button">로그아웃</button>
-    <button on:click={saveDashboardImage} class="save-image-button" disabled={downloading}>
-      {#if downloading}
-        <span class="spinner-button"></span>
-        저장중...
-      {:else}
-        대시보드 이미지 저장
-      {/if}
-    </button>
+    <!-- 모든 크기에서 햄버거 메뉴만 표시 -->
+    <div class="mobile-header">
+      <button class="hamburger" on:click={toggleSidebar}>&#9776;</button>
+    </div>
   </header>
+
+  {#if sidebarVisible}
+    <div class="sidebar-backdrop" on:click={toggleSidebar}></div>
+    <aside class="sidebar" transition:fly={{ x: 300, duration: 300 }}>
+      <button class="close-btn" on:click={toggleSidebar}>×</button>
+      <button on:click={handleLogout} class="logout-button">로그아웃</button>
+      <button on:click={saveDashboardImage} class="save-image-button" disabled={downloading}>
+        {#if downloading}
+          <span class="spinner-button"></span>
+          저장중...
+        {:else}
+          대시보드 이미지 저장
+        {/if}
+      </button>
+      <div class="totals">
+        <span>금액: {totalPrice}원</span>
+        <span>남은 금액: {totalRemaining}원</span>
+        <span>예상 관세: {totalCustoms}원</span>
+        <span>전체 합계: {overallTotal}원</span>
+      </div>
+    </aside>
+  {/if}
 {/if}
 
 {#if imagesLoading}
@@ -224,7 +264,6 @@
 {/if}
 
 <div class="dashboard">
-  <!-- 날짜 선택, 뷰 전환 등은 캡처 대상에서 제외 -->
   <div class="year-control">
     <button on:click={prevYear} disabled={parseInt(selectedYear) <= startYear}>←</button>
     <select bind:value={selectedYear}>
@@ -241,7 +280,7 @@
     </button>
   </div>
 
-  <!-- 캡처할 영역: 카드(달력)만 포함 -->
+  <!-- 캡처 대상 영역 -->
   <div class="capture-area">
     {#if viewMode === 'grid'}
       <div class="months-grid">
@@ -328,7 +367,75 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    /*z-index: 100;*/
+    z-index: 50;
+  }
+  /* 항상 햄버거 메뉴만 표시 */
+  .mobile-header {
+    display: block;
+    margin-left: auto;
+  }
+  .hamburger {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: inherit;
+  }
+  /* 다크모드에서 햄버거 버튼 색상 강제 지정 */
+  :global(html.dark) .hamburger {
+    color: #fff;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 250px;
+    height: 100%;
+    background-color: #fff;
+    padding: 1rem;
+    box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  :global(html.dark) .sidebar {
+    background-color: #333;
+    color: #fff;
+  }
+  .sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 90;
+  }
+  /* 닫기 버튼에 color: inherit 추가 */
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    align-self: flex-end;
+    cursor: pointer;
+    color: inherit;
+  }
+  .totals {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-weight: bold;
+  }
+  .totals span {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    background-color: #3498db;
+    color: #fff;
+  }
+  :global(html.dark) .totals span {
+    background-color: #555;
+    color: #fff;
   }
   .logout-button {
     padding: 0.5rem 1rem;
@@ -351,7 +458,6 @@
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.3s ease;
-    /*margin-left: auto;*/
     display: flex;
     align-items: center;
   }
@@ -396,8 +502,8 @@
     animation: spin 1s linear infinite;
   }
   .dashboard {
-    margin: 2rem auto;
-    padding: 1rem;
+    margin: 0 auto;
+    padding: 4rem 1rem;
     background-color: #fff;
     color: #333;
     transition: background-color 0.3s ease, color 0.3s ease;
@@ -479,13 +585,11 @@
   :global(html.dark) .year-control select {
     background-color: #333;
   }
-  /* capture-area: 캡처 대상 영역 (카드 부분) */
   .capture-area {
     background-color: #fff;
     padding: 1rem;
     color: #333;
   }
-
   :global(html.dark) .capture-area {
     background-color: #1e1e1e;
     color: #fff;
