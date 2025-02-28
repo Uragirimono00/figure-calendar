@@ -1,88 +1,125 @@
-<!-- src/App.svelte -->
 <script>
+    import { onMount } from "svelte";
     import { onAuthStateChanged } from "firebase/auth";
     import { auth } from "./firebase.js";
     import Login from "./Login.svelte";
     import Signup from "./Signup.svelte";
     import Dashboard from "./Dashboard.svelte";
-    import { onMount } from "svelte";
+    import PatchNotes from "./PatchNotes.svelte";
 
     let user = null;
     let showSignup = false;
     let darkMode = false;
+    // 현재 해시값에 따라 페이지를 분기 (기본값은 "dashboard")
+    let currentPage = "dashboard";
 
-    onAuthStateChanged(auth, (currentUser) => {
-        user = currentUser;
-    });
-
-    function handleAuthSuccess(event) {
-        user = event.detail.user;
+    function updatePage() {
+        const hash = window.location.hash;
+        if (hash === "#/patch-notes") {
+            currentPage = "patch-notes";
+        } else {
+            currentPage = "dashboard";
+        }
     }
 
-    // 로그인/회원가입 전환 함수
+    window.addEventListener("hashchange", updatePage);
+
+    onMount(() => {
+        updatePage();
+
+        // 다크모드 초기 설정 (기본값 true)
+        if (localStorage.getItem("darkMode") === null) {
+            darkMode = true;
+            localStorage.setItem("darkMode", "true");
+        } else {
+            darkMode = localStorage.getItem("darkMode") === "true";
+        }
+        updateDarkMode();
+
+        onAuthStateChanged(auth, (currentUser) => {
+            user = currentUser;
+        });
+    });
+
     function toggleAuthMode() {
         showSignup = !showSignup;
     }
 
-    // 다크모드 초기 상태 로드 (localStorage에 설정이 없으면 기본 다크모드 활성화)
-    onMount(() => {
-        if (localStorage.getItem('darkMode') === null) {
-            darkMode = true;
-            localStorage.setItem('darkMode', 'true');
-        } else {
-            darkMode = localStorage.getItem('darkMode') === 'true';
-        }
-        updateDarkMode();
-    });
-
-    // 다크모드 토글 함수
     function toggleDarkMode() {
         darkMode = !darkMode;
-        localStorage.setItem('darkMode', darkMode);
+        localStorage.setItem("darkMode", darkMode);
         updateDarkMode();
     }
 
-    // 다크모드 상태에 따라 html에 클래스 추가
     function updateDarkMode() {
         if (darkMode) {
-            document.documentElement.classList.add('dark');
+            document.documentElement.classList.add("dark");
         } else {
-            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.remove("dark");
         }
     }
 </script>
 
-<!-- 기존 헤더 영역 (필요에 따라 남기거나 제거 가능) -->
 {#if !user}
     {#if showSignup}
-        <Signup on:authSuccess={handleAuthSuccess} on:showLogin={toggleAuthMode} />
+        <Signup on:authSuccess="{(e) => (user = e.detail.user)}" on:showLogin="{toggleAuthMode}" />
     {:else}
-        <Login on:authSuccess={handleAuthSuccess} on:showSignup={toggleAuthMode} />
+        <Login on:authSuccess="{(e) => (user = e.detail.user)}" on:showSignup="{toggleAuthMode}" />
     {/if}
 {:else}
-    <Dashboard {user} />
+    {#if currentPage === "dashboard"}
+        <Dashboard {user} />
+    {:else if currentPage === "patch-notes"}
+        <PatchNotes />
+    {/if}
 {/if}
 
-<!-- 오른쪽 하단에 다크모드 전환 아이콘 버튼 -->
-<button class="toggle-dark-mode" on:click={toggleDarkMode}>
+<footer>
+    {#if currentPage !== "dashboard"}
+        <a href="#/">대시보드</a>
+    {/if}
+    {#if currentPage !== "patch-notes"}
+        <a href="#/patch-notes">패치노트 보기</a>
+    {/if}
+</footer>
+
+<button class="toggle-dark-mode" on:click="{toggleDarkMode}">
     {#if darkMode}
-        <!-- 다크모드 상태이면 라이트모드로 전환할 수 있도록 태양 아이콘 표시 -->
         🌞
     {:else}
-        <!-- 라이트모드 상태이면 다크모드로 전환할 수 있도록 달 아이콘 표시 -->
         🌜
     {/if}
 </button>
 
 <style>
-    /* 기존 .totals CSS (이미 변경한 내용) */
-    .totals {
-        display: flex;
-        gap: 1rem;
+    /* html과 body에 높이 100% 및 기본 마진 제거 */
+    :global(html, body) {
+        height: 100%;
+        margin: 0;
+    }
+    /* 앱의 기본 컨테이너가 최소 100vh를 차지하도록 */
+    main {
+        min-height: 100vh;
+    }
+    footer {
+        text-align: center;
+        padding: 1rem;
+        background: #f4f4f4;
+        font-size: 0.9rem;
+    }
+    :global(html.dark) footer {
+        background: #333;
+        color: #fff;
+    }
+    footer a {
+        margin: 0 0.5rem;
+        color: inherit;
+        text-decoration: none;
         font-weight: bold;
     }
-
-    /* 오른쪽 하단에 고정된 다크모드 토글 버튼 */
+    footer a:hover {
+        text-decoration: underline;
+    }
     .toggle-dark-mode {
         position: fixed;
         bottom: 1rem;

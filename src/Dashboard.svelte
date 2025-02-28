@@ -503,7 +503,7 @@
   }
   .dashboard {
     margin: 0 auto;
-    padding: 4rem 1rem;
+    padding: 6rem 1rem;
     background-color: #fff;
     color: #333;
     transition: background-color 0.3s ease, color 0.3s ease;
