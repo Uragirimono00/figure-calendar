@@ -17,7 +17,6 @@
   // 스크롤 이벤트 핸들러: 스크롤 방향에 따라 showHeader 토글
   function handleScroll() {
     const currentScrollY = window.pageYOffset;
-    // 스크롤을 내려서 일정 위치(예: 50px) 이상이면 헤더 숨김
     if (currentScrollY > lastScrollY && currentScrollY > 50) {
       showHeader = false;
     } else {
@@ -70,11 +69,15 @@
 
   let downloading = false;
 
-  // 뷰 모드 및 정렬 상태 (기본값)
+  // 뷰 모드 (grid, single, table)
   let viewMode = 'grid';
-  let sortColumn = "";
-  let sortDirection = "asc";
-  let loadedViewSortState = false;
+
+  // 다중 정렬 조건 배열 (우선순위가 높은 순으로 저장됨)
+  let sortCriteria = [];
+  // 뷰 모드가 table일 경우 기본적으로 'month' 컬럼 정렬 조건을 추가합니다.
+  $: if (viewMode === 'table' && sortCriteria.length === 0) {
+    sortCriteria = [{ column: 'month', direction: 'asc' }];
+  }
 
   // 사용자가 보여줄 테이블 컬럼 (true이면 표시)
   let visibleColumns = {
@@ -90,12 +93,6 @@
     expectedCustoms: true
   };
 
-  $: if (viewMode === 'table') {
-    sortColumn = 'month';
-    sortDirection = 'asc';
-  }
-
-  // onMount에서 visibleColumns 쿠키 불러오기
   onMount(() => {
     const savedVisibleColumns = getCookie(`visibleColumns-${user.uid}`);
     if (savedVisibleColumns) {
@@ -135,21 +132,21 @@
     }
     loadImages();
 
-    if (user && !loadedViewSortState) {
-      const savedViewMode = getCookie(`viewMode-${user.uid}`);
-      if (savedViewMode) viewMode = savedViewMode;
-      const savedSortColumn = getCookie(`sortColumn-${user.uid}`);
-      const savedSortDirection = getCookie(`sortDirection-${user.uid}`);
-      if (savedSortColumn) sortColumn = savedSortColumn;
-      if (savedSortDirection) sortDirection = savedSortDirection;
-      loadedViewSortState = true;
+    // 기존 단일 정렬 상태를 쿠키에서 불러오던 부분은 다중 정렬 조건에 맞게 확장할 수 있습니다.
+    const savedSortCriteria = getCookie(`sortCriteria-${user.uid}`);
+    if (savedSortCriteria) {
+      try {
+        sortCriteria = JSON.parse(savedSortCriteria);
+      } catch(e) {
+        console.error("sortCriteria cookie 파싱 실패:", e);
+      }
     }
   });
 
+  // 쿠키에 사용자 관련 설정 저장
   $: if (user) {
     setCookie(`viewMode-${user.uid}`, viewMode, 30);
-    setCookie(`sortColumn-${user.uid}`, sortColumn, 30);
-    setCookie(`sortDirection-${user.uid}`, sortDirection, 30);
+    setCookie(`sortCriteria-${user.uid}`, JSON.stringify(sortCriteria), 30);
     setCookie(`visibleColumns-${user.uid}`, JSON.stringify(visibleColumns), 30);
   }
 
@@ -175,8 +172,7 @@
           ]
           : Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`);
 
-
-  // 필터 상태 + 종류(type)와 사이즈(size) 추가, 그리고 범위 필터
+  // 필터 상태들
   let filterMonth = "";
   let filterDescription = "";
   let filterStatus = "";
@@ -220,37 +216,34 @@
     expectedCustoms: false
   };
 
-  // 클릭 시 정렬 컬럼과 방향을 변경하는 함수
-  function handleSort(column) {
-    if (sortColumn === column) {
-      sortDirection = sortDirection === "asc" ? "desc" : "asc";
-    } else {
-      sortColumn = column;
-      sortDirection = "asc";
-    }
-  }
-  // 필터링된 이미지 리스트가 있을 때 연월을 기준으로 정렬
+  // 다중 정렬을 위한 함수: 조건 배열을 순회하며 정렬
   $: sortedFilteredImages = [...filteredImages].sort((a, b) => {
-    if (!sortColumn) return 0;
-    let valA = a[sortColumn];
-    let valB = b[sortColumn];
+    for (const criteria of sortCriteria) {
+      const { column, direction } = criteria;
+      let valA = a[column];
+      let valB = b[column];
 
-    if (sortColumn === 'month') {
-      // "YYYY-MM" 형식의 문자열을 연도와 월로 분리하여 비교
-      const [yearA, monthA] = valA.split('-').map(Number);
-      const [yearB, monthB] = valB.split('-').map(Number);
-      if (yearA !== yearB) {
-        return sortDirection === "asc" ? yearA - yearB : yearB - yearA;
+      if (column === 'month') {
+        const [yearA, monthA] = valA.split('-').map(Number);
+        const [yearB, monthB] = valB.split('-').map(Number);
+        if (yearA !== yearB) {
+          return direction === "asc" ? yearA - yearB : yearB - yearA;
+        }
+        if (monthA !== monthB) {
+          return direction === "asc" ? monthA - monthB : monthB - monthA;
+        }
+      } else if (["price", "remaining", "expectedCustoms"].includes(column)) {
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+        if (valA !== valB) {
+          return direction === "asc" ? valA - valB : valB - valA;
+        }
+      } else {
+        if (valA < valB) return direction === "asc" ? -1 : 1;
+        if (valA > valB) return direction === "asc" ? 1 : -1;
       }
-      return sortDirection === "asc" ? monthA - monthB : monthB - monthA;
+      // 현재 조건에서 동일하면 다음 조건으로 넘어갑니다.
     }
-
-    if (["price", "remaining", "expectedCustoms"].includes(sortColumn)) {
-      valA = Number(valA) || 0;
-      valB = Number(valB) || 0;
-    }
-    if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-    if (valA > valB) return sortDirection === "asc" ? 1 : -1;
     return 0;
   });
 
@@ -385,23 +378,26 @@
       return;
     }
 
-    // 테이블 뷰 내의 모든 input과 select 요소를 찾아 span 요소로 대체
+    // 모든 태그에 overflow: hidden을 강제하는 스타일 태그를 추가
+    const noScrollStyle = document.createElement("style");
+    noScrollStyle.id = "no-scroll-style";
+    noScrollStyle.innerHTML = `* { overflow: hidden !important; }`;
+    document.head.appendChild(noScrollStyle);
+
+    // 테이블 뷰 내의 모든 input과 select 요소를 span으로 대체하는 기존 로직
     const editableElements = captureArea.querySelectorAll('input, select');
     const replacements = [];
     editableElements.forEach(element => {
       const span = document.createElement('span');
-      // 요소의 스타일 복사 (필요시 추가 조정)
       span.style.fontSize = window.getComputedStyle(element).fontSize;
       span.style.fontFamily = window.getComputedStyle(element).fontFamily;
       span.style.padding = window.getComputedStyle(element).padding;
-      // 요소 타입에 따라 값을 가져옴
       if (element.tagName.toLowerCase() === 'input') {
         span.textContent = element.value;
       } else if (element.tagName.toLowerCase() === 'select') {
         const selectedOption = element.options[element.selectedIndex];
         span.textContent = selectedOption ? selectedOption.textContent : '';
       }
-      // 요소 바로 앞에 span을 삽입하고 해당 요소는 숨김 처리
       element.parentNode.insertBefore(span, element);
       element.style.display = 'none';
       replacements.push({ element, span });
@@ -423,9 +419,14 @@
       element.style.display = '';
     });
 
+    // 추가한 no-scroll 스타일 제거
+    const existingNoScrollStyle = document.getElementById("no-scroll-style");
+    if (existingNoScrollStyle) {
+      existingNoScrollStyle.remove();
+    }
+
     downloading = false;
   }
-
 
   let sidebarVisible = false;
   function toggleSidebar() {
@@ -471,6 +472,24 @@
     } catch (error) {
       console.error(`Failed to update ${field}:`, error);
     }
+  }
+
+  // 다중 정렬 조건을 업데이트하는 함수
+  // 이미 존재하는 컬럼이면 방향을 토글하고, 2번째 클릭 시 조건에서 제거합니다.
+  function handleSort(column) {
+    const idx = sortCriteria.findIndex(c => c.column === column);
+    if (idx !== -1) {
+      if (sortCriteria[idx].direction === 'asc') {
+        sortCriteria[idx].direction = 'desc';
+      } else {
+        // 이미 내림차순 상태라면 조건 제거 (또는 필요에 따라 유지할 수 있음)
+        sortCriteria.splice(idx, 1);
+      }
+    } else {
+      sortCriteria.push({ column, direction: 'asc' });
+    }
+    // 배열을 재할당하여 Svelte 반응성을 트리거
+    sortCriteria = [...sortCriteria];
   }
 </script>
 
@@ -594,7 +613,6 @@
               {#if filterVisible.month}
                 <div class="filter-input">
                   <label>연월:</label>
-                  <!-- searchable dropdown using datalist -->
                   <input type="text" bind:value={filterMonth} placeholder="연월 선택" list="monthList" />
                   <datalist id="monthList">
                     {#each months as m}
@@ -685,7 +703,6 @@
             <label><input type="checkbox" bind:checked={visibleColumns.expectedCustoms}> 예상 관세</label>
           </div>
         </div>
-        <!-- 인라인 편집: 각 셀을 input 또는 select 로 표시 -->
         <table class="images-table">
           <thead>
           <tr>
@@ -694,47 +711,74 @@
             {/if}
             {#if visibleColumns.month}
               <th on:click={() => handleSort('month')}>
-                연월 {sortColumn === 'month' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                연월
+                {#if sortCriteria.find(c => c.column === 'month')}
+                  {sortCriteria.find(c => c.column === 'month').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.description}
               <th on:click={() => handleSort('description')}>
-                설명 {sortColumn === 'description' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                설명
+                {#if sortCriteria.find(c => c.column === 'description')}
+                  {sortCriteria.find(c => c.column === 'description').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.status}
               <th on:click={() => handleSort('status')}>
-                결제 상태 {sortColumn === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                결제 상태
+                {#if sortCriteria.find(c => c.column === 'status')}
+                  {sortCriteria.find(c => c.column === 'status').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.teamStatus}
               <th on:click={() => handleSort('teamStatus')}>
-                구매처 {sortColumn === 'teamStatus' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                구매처
+                {#if sortCriteria.find(c => c.column === 'teamStatus')}
+                  {sortCriteria.find(c => c.column === 'teamStatus').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.type}
               <th on:click={() => handleSort('type')}>
-                종류 {sortColumn === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                종류
+                {#if sortCriteria.find(c => c.column === 'type')}
+                  {sortCriteria.find(c => c.column === 'type').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.size}
               <th on:click={() => handleSort('size')}>
-                사이즈 {sortColumn === 'size' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                사이즈
+                {#if sortCriteria.find(c => c.column === 'size')}
+                  {sortCriteria.find(c => c.column === 'size').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.price}
               <th on:click={() => handleSort('price')}>
-                금액 {sortColumn === 'price' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                금액
+                {#if sortCriteria.find(c => c.column === 'price')}
+                  {sortCriteria.find(c => c.column === 'price').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.remaining}
               <th on:click={() => handleSort('remaining')}>
-                남은 금액 {sortColumn === 'remaining' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                남은 금액
+                {#if sortCriteria.find(c => c.column === 'remaining')}
+                  {sortCriteria.find(c => c.column === 'remaining').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
             {#if visibleColumns.expectedCustoms}
               <th on:click={() => handleSort('expectedCustoms')}>
-                예상 관세 {sortColumn === 'expectedCustoms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                예상 관세
+                {#if sortCriteria.find(c => c.column === 'expectedCustoms')}
+                  {sortCriteria.find(c => c.column === 'expectedCustoms').direction === 'asc' ? '▲' : '▼'}
+                {/if}
               </th>
             {/if}
           </tr>
@@ -761,7 +805,7 @@
               {/if}
               {#if visibleColumns.status}
                 <td>
-                  <select value={img.status} on:blur={(e) => updateImageField(img, 'status', e.target.value)}>
+                  <select bind:value={img.status} on:blur={(e) => updateImageField(img, 'status', e.target.value)}>
                     {#each statusOptions as opt}
                       <option value={opt}>{opt}</option>
                     {/each}
@@ -770,7 +814,7 @@
               {/if}
               {#if visibleColumns.teamStatus}
                 <td>
-                  <select value={img.teamStatus} on:blur={(e) => updateImageField(img, 'teamStatus', e.target.value)}>
+                  <select bind:value={img.teamStatus} on:blur={(e) => updateImageField(img, 'teamStatus', e.target.value)}>
                     {#each teamStatusOptions as opt}
                       <option value={opt}>{opt}</option>
                     {/each}
@@ -779,7 +823,7 @@
               {/if}
               {#if visibleColumns.type}
                 <td>
-                  <select value={img.type} on:blur={(e) => updateImageField(img, 'type', e.target.value)}>
+                  <select bind:value={img.type} on:blur={(e) => updateImageField(img, 'type', e.target.value)}>
                     {#each typeOptions as opt}
                       <option value={opt}>{opt}</option>
                     {/each}
@@ -788,7 +832,7 @@
               {/if}
               {#if visibleColumns.size}
                 <td>
-                  <select value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)}>
+                  <select bind:value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)}>
                     {#each sizeOptions as opt}
                       <option value={opt}>{opt}</option>
                     {/each}
@@ -857,12 +901,9 @@
     z-index: 50;
     transition: transform 0.3s ease-in-out;
   }
-
-  /* hide 클래스가 적용되면 위로 슬라이드되어 보이지 않게 */
   .dashboard-header.hide {
     transform: translateY(-100%);
   }
-
   .view-switch button {
     background: none;
     border: none;
@@ -870,12 +911,11 @@
     cursor: pointer;
     transition: transform 0.2s ease, opacity 0.2s ease;
     margin-right: 0.5rem;
-    opacity: 0.5; /* 기본 투명도 */
+    opacity: 0.5;
   }
-
   .view-switch button.selected {
     transform: scale(1.2);
-    opacity: 1; /* 선택된 경우 투명도 1 */
+    opacity: 1;
   }
   .mobile-header .hamburger {
     background: none;
@@ -1057,7 +1097,6 @@
     gap: 0.5rem;
     margin-bottom: 0.5rem;
   }
-  /* 필터 아이콘 기본 투명도 적용 (focus 상태 제외) */
   .filter-icons button {
     background: none;
     border: none;
@@ -1097,7 +1136,6 @@
     border-color: #666;
     color: #fff;
   }
-  /* 반응형: 모바일에서 컬럼 토글 스타일 변경 */
   .column-toggle {
     display: flex;
     flex-wrap: wrap;
