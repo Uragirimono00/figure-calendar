@@ -640,18 +640,39 @@
         <table class="images-table">
           <thead>
           <tr>
-            {#if visibleColumns.src}<th>이미지</th>{/if}
-            {#if visibleColumns.month}<th>연월</th>{/if}
-            {#if visibleColumns.description}<th>설명</th>{/if}
-            {#if visibleColumns.status}<th>결제 상태</th>{/if}
-            {#if visibleColumns.teamStatus}<th>구매처</th>{/if}
-            {#if visibleColumns.type}<th>종류</th>{/if}
-            {#if visibleColumns.size}<th>사이즈</th>{/if}
-            {#if visibleColumns.price}<th>금액</th>{/if}
-            {#if visibleColumns.remaining}<th>남은 금액</th>{/if}
-            {#if visibleColumns.expectedCustoms}<th>예상 관세</th>{/if}
+            {#if visibleColumns.src}
+              <th>이미지</th>
+            {/if}
+            {#if visibleColumns.month}
+              <th on:click={() => handleSort('month')}>연월</th>
+            {/if}
+            {#if visibleColumns.description}
+              <th on:click={() => handleSort('description')}>설명</th>
+            {/if}
+            {#if visibleColumns.status}
+              <th on:click={() => handleSort('status')}>결제 상태</th>
+            {/if}
+            {#if visibleColumns.teamStatus}
+              <th on:click={() => handleSort('teamStatus')}>구매처</th>
+            {/if}
+            {#if visibleColumns.type}
+              <th on:click={() => handleSort('type')}>종류</th>
+            {/if}
+            {#if visibleColumns.size}
+              <th on:click={() => handleSort('size')}>사이즈</th>
+            {/if}
+            {#if visibleColumns.price}
+              <th on:click={() => handleSort('price')}>금액</th>
+            {/if}
+            {#if visibleColumns.remaining}
+              <th on:click={() => handleSort('remaining')}>남은 금액</th>
+            {/if}
+            {#if visibleColumns.expectedCustoms}
+              <th on:click={() => handleSort('expectedCustoms')}>예상 관세</th>
+            {/if}
           </tr>
           </thead>
+
           <tbody>
           {#each sortedFilteredImages as img}
             <tr>
