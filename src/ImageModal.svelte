@@ -2,8 +2,7 @@
 <script>
     import { onMount, createEventDispatcher } from 'svelte';
     export let image;
-    // image 객체에 새 필드가 포함될 수 있습니다.
-    // { id, src, date, description, month, storagePath, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate, purchasePlace }
+    // image 객체: { id, src, date, description, month, storagePath, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate, purchasePlace }
     const dispatch = createEventDispatcher();
 
     let description = image.description || "";
@@ -13,9 +12,14 @@
     // 새 필드들 (기본값 설정)
     let type = image.type || "PVC";
     let size = image.size || "1/1";
-    let price = image.price || "";
-    let remaining = image.remaining || "";
-    let expectedCustoms = image.expectedCustoms || "";
+    // 숫자 관련 필드는 raw 값(콤마 없이)로 저장하고, 포맷된 값은 반응적으로 계산
+    let priceRaw = image.price ? String(image.price) : "";
+    let remainingRaw = image.remaining ? String(image.remaining) : "";
+    let expectedCustomsRaw = image.expectedCustoms ? String(image.expectedCustoms) : "";
+    $: priceFormatted = formatNumber(priceRaw);
+    $: remainingFormatted = formatNumber(remainingRaw);
+    $: expectedCustomsFormatted = formatNumber(expectedCustomsRaw);
+
     let purchaseDate = image.purchaseDate || "";
     let purchasePlace = image.purchasePlace || "ASL";
 
@@ -26,7 +30,30 @@
         imageLoaded = true;
     }
 
-    // 자동 저장: 필드가 변경될 때마다 부모 컴포넌트에 save 이벤트를 보냅니다.
+    // 숫자에 천단위 구분 콤마를 추가하는 헬퍼 함수
+    function formatNumber(n) {
+        if (!n) return "";
+        return Number(n).toLocaleString();
+    }
+
+    // 입력값에서 콤마 및 숫자가 아닌 문자 제거 후 raw 값을 업데이트하고, 자동 저장 호출
+    function handlePriceInput(event) {
+        let val = event.target.value.replace(/,/g, '').replace(/\D/g, '');
+        priceRaw = val;
+        save();
+    }
+    function handleRemainingInput(event) {
+        let val = event.target.value.replace(/,/g, '').replace(/\D/g, '');
+        remainingRaw = val;
+        save();
+    }
+    function handleExpectedCustomsInput(event) {
+        let val = event.target.value.replace(/,/g, '').replace(/\D/g, '');
+        expectedCustomsRaw = val;
+        save();
+    }
+
+    // 필드 변경 시 자동 저장 (저장 버튼은 제거)
     function save() {
         dispatch('save', {
             description,
@@ -34,9 +61,9 @@
             teamStatus,
             type,
             size,
-            price,
-            remaining,
-            expectedCustoms,
+            price: priceRaw,             // 저장 시 raw 값만 전달
+            remaining: remainingRaw,
+            expectedCustoms: expectedCustomsRaw,
             purchaseDate,
             purchasePlace
         });
@@ -135,17 +162,17 @@
 
         <div class="status-select">
             <label>금액:</label>
-            <input type="number" bind:value={price} placeholder="금액 입력 (원)" on:input={save} />
+            <input type="text" value={priceFormatted} on:input={handlePriceInput} placeholder="금액 입력 (원)" />
         </div>
 
         <div class="status-select">
             <label>남은 금액:</label>
-            <input type="number" bind:value={remaining} placeholder="남은 금액 입력 (원)" on:input={save} />
+            <input type="text" value={remainingFormatted} on:input={handleRemainingInput} placeholder="남은 금액 입력 (원)" />
         </div>
 
         <div class="status-select">
             <label>예상 관세:</label>
-            <input type="number" bind:value={expectedCustoms} placeholder="예상 관세 입력 (원)" on:input={save} />
+            <input type="text" value={expectedCustomsFormatted} on:input={handleExpectedCustomsInput} placeholder="예상 관세 입력 (원)" />
         </div>
 
         <div class="status-select">
@@ -154,7 +181,7 @@
         </div>
 
         <div class="modal-buttons">
-            <button class="btn-save" on:click={save}>저장</button>
+            <!-- 자동 저장으로 저장 버튼 제거 -->
             <button class="btn-delete" on:click={deleteImage}>삭제</button>
             <button class="btn-close" on:click={closeModal}>닫기</button>
         </div>
@@ -289,13 +316,6 @@
         cursor: pointer;
         transition: background-color 0.2s ease;
     }
-    .btn-save {
-        background-color: #3498db;
-        color: #fff;
-    }
-    .btn-save:hover {
-        background-color: #2980b9;
-    }
     .btn-delete {
         background-color: #e74c3c;
         color: #fff;
@@ -309,12 +329,6 @@
     }
     .btn-close:hover {
         background-color: #7f8c8d;
-    }
-    :global(html.dark) .btn-save {
-        background-color: #2980b9;
-    }
-    :global(html.dark) .btn-save:hover {
-        background-color: #1c638d;
     }
     :global(html.dark) .btn-delete {
         background-color: #c0392b;
