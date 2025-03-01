@@ -10,6 +10,38 @@
   import { signOut } from 'firebase/auth';
   import domtoimage from 'dom-to-image';
 
+  // 헤더 표시 여부를 제어할 변수
+  let showHeader = true;
+  let lastScrollY = 0;
+
+  // 스크롤 이벤트 핸들러: 스크롤 방향에 따라 showHeader 토글
+  function handleScroll() {
+    const currentScrollY = window.pageYOffset;
+    // 스크롤을 내려서 일정 위치(예: 50px) 이상이면 헤더 숨김
+    if (currentScrollY > lastScrollY && currentScrollY > 50) {
+      showHeader = false;
+    } else {
+      showHeader = true;
+    }
+    lastScrollY = currentScrollY;
+  }
+
+  // 마우스 이동 이벤트 핸들러: 마우스가 상단 근처(예: 50px 미만)에 있으면 헤더 보이게
+  function handleMouseMove(event) {
+    if (event.clientY < 50) {
+      showHeader = true;
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  });
+
   // 쿠키 저장/불러오기 유틸리티 함수
   function setCookie(name, value, days) {
     let expires = "";
@@ -51,6 +83,8 @@
     description: true,
     status: true,
     teamStatus: true,
+    type: true,
+    size: true,
     price: true,
     remaining: true,
     expectedCustoms: true
@@ -124,30 +158,49 @@
     return groups;
   }
 
-  const startYear = 2000;
-  const endYear = 2099;
+  const startYear = 2010;
+  const endYear = 2035;
   let currentYear = new Date().getFullYear();
   let selectedYear = currentYear.toString();
-  $: months = Array.from({ length: 12 }, (_, i) =>
-          `${selectedYear}-${String(i + 1).padStart(2, '0')}`
-  );
+  $: months = viewMode === 'table'
+          ? [
+            ...Array.from({ length: 12 }, (_, i) => `${Number(selectedYear) - 1}-${String(i + 1).padStart(2, '0')}`),
+            ...Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`),
+            ...Array.from({ length: 12 }, (_, i) => `${Number(selectedYear) + 1}-${String(i + 1).padStart(2, '0')}`)
+          ]
+          : Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`);
 
-  // 필터 상태 (날짜 관련 필터 제거)
+
+  // 필터 상태 + 종류(type)와 사이즈(size) 추가, 그리고 범위 필터
   let filterMonth = "";
   let filterDescription = "";
   let filterStatus = "";
   let filterTeamStatus = "";
-  let filterPrice = "";
-  let filterRemaining = "";
-  let filterExpectedCustoms = "";
+  let filterType = "";
+  let filterSize = "";
+  let filterPriceMin = "";
+  let filterPriceMax = "";
+  let filterRemainingMin = "";
+  let filterRemainingMax = "";
+  let filterExpectedCustomsMin = "";
+  let filterExpectedCustomsMax = "";
+
   $: filteredImages = images.filter(img => {
+    const price = Number(img.price) || 0;
+    const remaining = Number(img.remaining) || 0;
+    const expectedCustoms = Number(img.expectedCustoms) || 0;
     return (!filterMonth || img.month.includes(filterMonth))
             && (!filterDescription || img.description.includes(filterDescription))
             && (!filterStatus || img.status === filterStatus)
             && (!filterTeamStatus || img.teamStatus === filterTeamStatus)
-            && (!filterPrice || String(img.price).includes(filterPrice))
-            && (!filterRemaining || String(img.remaining).includes(filterRemaining))
-            && (!filterExpectedCustoms || String(img.expectedCustoms).includes(filterExpectedCustoms));
+            && (!filterType || img.type === filterType)
+            && (!filterSize || img.size === filterSize)
+            && (!filterPriceMin || price >= Number(filterPriceMin))
+            && (!filterPriceMax || price <= Number(filterPriceMax))
+            && (!filterRemainingMin || remaining >= Number(filterRemainingMin))
+            && (!filterRemainingMax || remaining <= Number(filterRemainingMax))
+            && (!filterExpectedCustomsMin || expectedCustoms >= Number(filterExpectedCustomsMin))
+            && (!filterExpectedCustomsMax || expectedCustoms <= Number(filterExpectedCustomsMax));
   });
 
   let filterVisible = {
@@ -155,6 +208,8 @@
     description: false,
     status: false,
     teamStatus: false,
+    type: false,
+    size: false,
     price: false,
     remaining: false,
     expectedCustoms: false
@@ -279,7 +334,7 @@
       await updateDoc(doc(db, "images", image.id), { teamStatus: newTeamStatus });
       images = images.map(img => img.id === image.id ? { ...img, teamStatus: newTeamStatus } : img);
       setCookie(cacheKey, JSON.stringify(images), 30);
-    } catch(error) {
+    } catch (error) {
       console.error("Team status update failed:", error);
     }
   }
@@ -337,13 +392,41 @@
     return isNaN(num) ? "0" : num.toLocaleString();
   }
 
+  // 확장된 visibleColumns
+  visibleColumns = {
+    ...visibleColumns,
+    type: visibleColumns.type ?? true,
+    size: visibleColumns.size ?? true
+  };
+
+  // 확장된 filterVisible
+  filterVisible = {
+    ...filterVisible,
+    type: false,
+    size: false
+  };
+
+  // 새로운 드롭다운 옵션 (필터용)
+  const typeOptions = ["", "PVC", "레진"];
+  const sizeOptions = ["", "1/1", "1/1.5", "1/2", "1/2.5", "1/3", "1/3.5", "1/4", "1/4.5", "1/5", "1/5.5", "1/6", "1/6.5", "1/7", "1/7.5", "1/8", "1/8.5", "1/9", "1/9.5", "1/10", "1/10.5", "1/11", "1/11.5", "1/12"];
+
   const statusOptions = ["", "예약금", "전액", "꼴림"];
   const teamStatusOptions = ["", "코아", "매하", "히탐", "래빗츠", "유메", "위북", "드리머", "중고"];
+
+  // 인라인 편집 시 DB에 저장하는 헬퍼 함수
+  async function updateImageField(image, field, newValue) {
+    try {
+      await updateDoc(doc(db, "images", image.id), { [field]: newValue });
+      images = images.map(img => img.id === image.id ? { ...img, [field]: newValue } : img);
+      setCookie(cacheKey, JSON.stringify(images), 30);
+    } catch (error) {
+      console.error(`Failed to update ${field}:`, error);
+    }
+  }
 </script>
 
-<!-- 마크업 -->
 {#if user}
-  <header class="dashboard-header">
+  <header class="dashboard-header" class:hide={!showHeader}>
     <div class="view-switch">
       <button on:click={() => viewMode = 'grid'} class:selected={viewMode==='grid'} title="연도로보기">📆</button>
       <button on:click={() => viewMode = 'single'} class:selected={viewMode==='single'} title="월로보기">📅</button>
@@ -448,19 +531,27 @@
         <div class="table-controls">
           <div class="filter-section">
             <div class="filter-icons">
-              <button on:click={() => filterVisible.month = !filterVisible.month} title="연월 필터">🗓</button>
-              <button on:click={() => filterVisible.description = !filterVisible.description} title="설명 필터">💬</button>
-              <button on:click={() => filterVisible.status = !filterVisible.status} title="결제 상태 필터">🔘</button>
-              <button on:click={() => filterVisible.teamStatus = !filterVisible.teamStatus} title="구매처 필터">👥</button>
-              <button on:click={() => filterVisible.price = !filterVisible.price} title="금액 필터">💲</button>
-              <button on:click={() => filterVisible.remaining = !filterVisible.remaining} title="남은 금액 필터">💰</button>
-              <button on:click={() => filterVisible.expectedCustoms = !filterVisible.expectedCustoms} title="예상 관세 필터">📦</button>
+              <button class:active={filterVisible.month} on:click={(e) => { e.target.blur(); filterVisible.month = !filterVisible.month; }} title="연월 필터">📅</button>
+              <button class:active={filterVisible.description} on:click={(e) => { e.target.blur(); filterVisible.description = !filterVisible.description; }} title="설명 필터">💬</button>
+              <button class:active={filterVisible.status} on:click={(e) => { e.target.blur(); filterVisible.status = !filterVisible.status; }} title="결제 상태 필터">🔘</button>
+              <button class:active={filterVisible.teamStatus} on:click={(e) => { e.target.blur(); filterVisible.teamStatus = !filterVisible.teamStatus; }} title="구매처 필터">👥</button>
+              <button class:active={filterVisible.type} on:click={(e) => { e.target.blur(); filterVisible.type = !filterVisible.type; }} title="종류 필터">📦</button>
+              <button class:active={filterVisible.size} on:click={(e) => { e.target.blur(); filterVisible.size = !filterVisible.size; }} title="사이즈 필터">📏</button>
+              <button class:active={filterVisible.price} on:click={(e) => { e.target.blur(); filterVisible.price = !filterVisible.price; }} title="금액 필터">💲</button>
+              <button class:active={filterVisible.remaining} on:click={(e) => { e.target.blur(); filterVisible.remaining = !filterVisible.remaining; }} title="남은 금액 필터">💰</button>
+              <button class:active={filterVisible.expectedCustoms} on:click={(e) => { e.target.blur(); filterVisible.expectedCustoms = !filterVisible.expectedCustoms; }} title="예상 관세 필터">📦</button>
             </div>
             <div class="filter-inputs">
               {#if filterVisible.month}
                 <div class="filter-input">
                   <label>연월:</label>
-                  <input type="text" bind:value={filterMonth} placeholder="예: 2023-05" />
+                  <!-- searchable dropdown using datalist -->
+                  <input type="text" bind:value={filterMonth} placeholder="연월 선택" list="monthList" />
+                  <datalist id="monthList">
+                    {#each months as m}
+                      <option value={m} />
+                    {/each}
+                  </datalist>
                 </div>
               {/if}
               {#if filterVisible.description}
@@ -489,22 +580,45 @@
                   </select>
                 </div>
               {/if}
+              {#if filterVisible.type}
+                <div class="filter-input">
+                  <label>종류:</label>
+                  <select bind:value={filterType}>
+                    {#each typeOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+              {#if filterVisible.size}
+                <div class="filter-input">
+                  <label>사이즈:</label>
+                  <select bind:value={filterSize}>
+                    {#each sizeOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
               {#if filterVisible.price}
                 <div class="filter-input">
                   <label>금액:</label>
-                  <input type="text" bind:value={filterPrice} placeholder="금액 필터" />
+                  <input type="text" bind:value={filterPriceMin} placeholder="최소 (원)" />
+                  <input type="text" bind:value={filterPriceMax} placeholder="최대 (원)" />
                 </div>
               {/if}
               {#if filterVisible.remaining}
                 <div class="filter-input">
                   <label>남은 금액:</label>
-                  <input type="text" bind:value={filterRemaining} placeholder="남은 금액 필터" />
+                  <input type="text" bind:value={filterRemainingMin} placeholder="최소 (원)" />
+                  <input type="text" bind:value={filterRemainingMax} placeholder="최대 (원)" />
                 </div>
               {/if}
               {#if filterVisible.expectedCustoms}
                 <div class="filter-input">
                   <label>예상 관세:</label>
-                  <input type="text" bind:value={filterExpectedCustoms} placeholder="예상 관세 필터" />
+                  <input type="text" bind:value={filterExpectedCustomsMin} placeholder="최소 (원)" />
+                  <input type="text" bind:value={filterExpectedCustomsMax} placeholder="최대 (원)" />
                 </div>
               {/if}
             </div>
@@ -515,35 +629,100 @@
             <label><input type="checkbox" bind:checked={visibleColumns.description}> 설명</label>
             <label><input type="checkbox" bind:checked={visibleColumns.status}> 결제 상태</label>
             <label><input type="checkbox" bind:checked={visibleColumns.teamStatus}> 구매처</label>
+            <label><input type="checkbox" bind:checked={visibleColumns.type}> 종류</label>
+            <label><input type="checkbox" bind:checked={visibleColumns.size}> 사이즈</label>
             <label><input type="checkbox" bind:checked={visibleColumns.price}> 금액</label>
             <label><input type="checkbox" bind:checked={visibleColumns.remaining}> 남은 금액</label>
             <label><input type="checkbox" bind:checked={visibleColumns.expectedCustoms}> 예상 관세</label>
           </div>
         </div>
+        <!-- 인라인 편집: 각 셀을 input 또는 select 로 표시 -->
         <table class="images-table">
           <thead>
           <tr>
-            {#if visibleColumns.src}<th on:click={() => handleSort('src')}>이미지 {sortColumn==='src' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.month}<th on:click={() => handleSort('month')}>연월 {sortColumn==='month' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.description}<th on:click={() => handleSort('description')}>설명 {sortColumn==='description' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.status}<th on:click={() => handleSort('status')}>결제 상태 {sortColumn==='status' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.teamStatus}<th on:click={() => handleSort('teamStatus')}>구매처 {sortColumn==='teamStatus' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.price}<th on:click={() => handleSort('price')}>금액 {sortColumn==='price' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.remaining}<th on:click={() => handleSort('remaining')}>남은 금액 {sortColumn==='remaining' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.expectedCustoms}<th on:click={() => handleSort('expectedCustoms')}>예상 관세 {sortColumn==='expectedCustoms' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
+            {#if visibleColumns.src}<th>이미지</th>{/if}
+            {#if visibleColumns.month}<th>연월</th>{/if}
+            {#if visibleColumns.description}<th>설명</th>{/if}
+            {#if visibleColumns.status}<th>결제 상태</th>{/if}
+            {#if visibleColumns.teamStatus}<th>구매처</th>{/if}
+            {#if visibleColumns.type}<th>종류</th>{/if}
+            {#if visibleColumns.size}<th>사이즈</th>{/if}
+            {#if visibleColumns.price}<th>금액</th>{/if}
+            {#if visibleColumns.remaining}<th>남은 금액</th>{/if}
+            {#if visibleColumns.expectedCustoms}<th>예상 관세</th>{/if}
           </tr>
           </thead>
           <tbody>
           {#each sortedFilteredImages as img}
-            <tr on:click={() => handleImageClicked({ detail: { image: img } })}>
-              {#if visibleColumns.src}<td><img src={img.src} alt="Image" class="table-thumb" /></td>{/if}
-              {#if visibleColumns.month}<td>{img.month}</td>{/if}
-              {#if visibleColumns.description}<td>{img.description}</td>{/if}
-              {#if visibleColumns.status}<td>{img.status}</td>{/if}
-              {#if visibleColumns.teamStatus}<td>{img.teamStatus}</td>{/if}
-              {#if visibleColumns.price}<td>{formatNumber(img.price)}</td>{/if}
-              {#if visibleColumns.remaining}<td>{formatNumber(img.remaining)}</td>{/if}
-              {#if visibleColumns.expectedCustoms}<td>{formatNumber(img.expectedCustoms)}</td>{/if}
+            <tr>
+              {#if visibleColumns.src}
+                <td><img src={img.src} alt="Image" class="table-thumb" /></td>
+              {/if}
+              {#if visibleColumns.month}
+                <td>
+                  <select value={img.month} on:blur={(e) => updateImageField(img, 'month', e.target.value)}>
+                    {#each months as m}
+                      <option value={m}>{m}</option>
+                    {/each}
+                  </select>
+                </td>
+              {/if}
+              {#if visibleColumns.description}
+                <td>
+                  <input type="text" value={img.description} on:blur={(e) => updateImageField(img, 'description', e.target.value)} />
+                </td>
+              {/if}
+              {#if visibleColumns.status}
+                <td>
+                  <select value={img.status} on:blur={(e) => updateImageField(img, 'status', e.target.value)}>
+                    {#each statusOptions as opt}
+                      <option value={opt}>{opt}</option>
+                    {/each}
+                  </select>
+                </td>
+              {/if}
+              {#if visibleColumns.teamStatus}
+                <td>
+                  <select value={img.teamStatus} on:blur={(e) => updateImageField(img, 'teamStatus', e.target.value)}>
+                    {#each teamStatusOptions as opt}
+                      <option value={opt}>{opt}</option>
+                    {/each}
+                  </select>
+                </td>
+              {/if}
+              {#if visibleColumns.type}
+                <td>
+                  <select value={img.type} on:blur={(e) => updateImageField(img, 'type', e.target.value)}>
+                    {#each typeOptions as opt}
+                      <option value={opt}>{opt}</option>
+                    {/each}
+                  </select>
+                </td>
+              {/if}
+              {#if visibleColumns.size}
+                <td>
+                  <select value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)}>
+                    {#each sizeOptions as opt}
+                      <option value={opt}>{opt}</option>
+                    {/each}
+                  </select>
+                </td>
+              {/if}
+              {#if visibleColumns.price}
+                <td>
+                  <input type="number" value={img.price} on:blur={(e) => updateImageField(img, 'price', e.target.value)} />
+                </td>
+              {/if}
+              {#if visibleColumns.remaining}
+                <td>
+                  <input type="number" value={img.remaining} on:blur={(e) => updateImageField(img, 'remaining', e.target.value)} />
+                </td>
+              {/if}
+              {#if visibleColumns.expectedCustoms}
+                <td>
+                  <input type="number" value={img.expectedCustoms} on:blur={(e) => updateImageField(img, 'expectedCustoms', e.target.value)} />
+                </td>
+              {/if}
             </tr>
           {/each}
           </tbody>
@@ -589,17 +768,27 @@
     justify-content: space-between;
     align-items: center;
     z-index: 50;
+    transition: transform 0.3s ease-in-out;
   }
+
+  /* hide 클래스가 적용되면 위로 슬라이드되어 보이지 않게 */
+  .dashboard-header.hide {
+    transform: translateY(-100%);
+  }
+
   .view-switch button {
     background: none;
     border: none;
     font-size: 1.8rem;
     cursor: pointer;
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease;
     margin-right: 0.5rem;
+    opacity: 0.5; /* 기본 투명도 */
   }
+
   .view-switch button.selected {
     transform: scale(1.2);
+    opacity: 1; /* 선택된 경우 투명도 1 */
   }
   .mobile-header .hamburger {
     background: none;
@@ -724,6 +913,7 @@
     animation: spin 1s linear infinite;
   }
   .dashboard {
+    min-height: 100%;
     margin: 0 auto;
     padding: 6rem 1rem 1rem 1rem;
     background-color: #fff;
@@ -760,6 +950,11 @@
   }
   .table-view-container {
     position: relative;
+    overflow-x: auto;
+  }
+  :global(html.dark) .table-view-container {
+    background-color: #1e1e1e;
+    color: #fff;
   }
   .table-controls {
     display: flex;
@@ -775,11 +970,18 @@
     gap: 0.5rem;
     margin-bottom: 0.5rem;
   }
+  /* 필터 아이콘 기본 투명도 적용 (focus 상태 제외) */
   .filter-icons button {
     background: none;
     border: none;
     font-size: 1.4rem;
     cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+  .filter-icons button.active,
+  .filter-icons button:hover {
+    opacity: 1;
   }
   .filter-inputs {
     display: flex;
@@ -789,7 +991,7 @@
   .filter-input {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 1rem;
   }
   .filter-input label {
     font-size: 0.9rem;
@@ -808,14 +1010,30 @@
     border-color: #666;
     color: #fff;
   }
+  /* 반응형: 모바일에서 컬럼 토글 스타일 변경 */
   .column-toggle {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 1rem;
     align-items: center;
-  }
-  .column-toggle label {
     font-size: 0.9rem;
+  }
+  @media (max-width: 680px) {
+    .column-toggle {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+      font-size: 0.8rem;
+    }
+    .column-toggle label {
+      width: 100%;
+      min-width: 80px;
+      padding: 0.5rem;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
   }
   .images-table {
     width: 100%;
