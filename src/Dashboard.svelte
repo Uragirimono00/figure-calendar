@@ -451,7 +451,7 @@
               <button on:click={() => filterVisible.month = !filterVisible.month} title="연월 필터">🗓</button>
               <button on:click={() => filterVisible.description = !filterVisible.description} title="설명 필터">💬</button>
               <button on:click={() => filterVisible.status = !filterVisible.status} title="결제 상태 필터">🔘</button>
-              <button on:click={() => filterVisible.teamStatus = !filterVisible.teamStatus} title="팀상태 필터">👥</button>
+              <button on:click={() => filterVisible.teamStatus = !filterVisible.teamStatus} title="구매처 필터">👥</button>
               <button on:click={() => filterVisible.price = !filterVisible.price} title="금액 필터">💲</button>
               <button on:click={() => filterVisible.remaining = !filterVisible.remaining} title="남은 금액 필터">💰</button>
               <button on:click={() => filterVisible.expectedCustoms = !filterVisible.expectedCustoms} title="예상 관세 필터">📦</button>
@@ -481,7 +481,7 @@
               {/if}
               {#if filterVisible.teamStatus}
                 <div class="filter-input">
-                  <label>팀상태:</label>
+                  <label>구매처:</label>
                   <select bind:value={filterTeamStatus}>
                     {#each teamStatusOptions as opt}
                       <option value={opt}>{opt === "" ? "전체" : opt}</option>
@@ -514,7 +514,7 @@
             <label><input type="checkbox" bind:checked={visibleColumns.month}> 연월</label>
             <label><input type="checkbox" bind:checked={visibleColumns.description}> 설명</label>
             <label><input type="checkbox" bind:checked={visibleColumns.status}> 결제 상태</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.teamStatus}> 팀상태</label>
+            <label><input type="checkbox" bind:checked={visibleColumns.teamStatus}> 구매처</label>
             <label><input type="checkbox" bind:checked={visibleColumns.price}> 금액</label>
             <label><input type="checkbox" bind:checked={visibleColumns.remaining}> 남은 금액</label>
             <label><input type="checkbox" bind:checked={visibleColumns.expectedCustoms}> 예상 관세</label>
@@ -527,7 +527,7 @@
             {#if visibleColumns.month}<th on:click={() => handleSort('month')}>연월 {sortColumn==='month' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
             {#if visibleColumns.description}<th on:click={() => handleSort('description')}>설명 {sortColumn==='description' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
             {#if visibleColumns.status}<th on:click={() => handleSort('status')}>결제 상태 {sortColumn==='status' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
-            {#if visibleColumns.teamStatus}<th on:click={() => handleSort('teamStatus')}>팀상태 {sortColumn==='teamStatus' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
+            {#if visibleColumns.teamStatus}<th on:click={() => handleSort('teamStatus')}>구매처 {sortColumn==='teamStatus' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
             {#if visibleColumns.price}<th on:click={() => handleSort('price')}>금액 {sortColumn==='price' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
             {#if visibleColumns.remaining}<th on:click={() => handleSort('remaining')}>남은 금액 {sortColumn==='remaining' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
             {#if visibleColumns.expectedCustoms}<th on:click={() => handleSort('expectedCustoms')}>예상 관세 {sortColumn==='expectedCustoms' ? (sortDirection==='asc'?'▲':'▼') : ''}</th>{/if}
