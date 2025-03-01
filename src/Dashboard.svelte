@@ -90,6 +90,11 @@
     expectedCustoms: true
   };
 
+  $: if (viewMode === 'table') {
+    sortColumn = 'month';
+    sortDirection = 'asc';
+  }
+
   // onMount에서 visibleColumns 쿠키 불러오기
   onMount(() => {
     const savedVisibleColumns = getCookie(`visibleColumns-${user.uid}`);
@@ -215,6 +220,7 @@
     expectedCustoms: false
   };
 
+  // 클릭 시 정렬 컬럼과 방향을 변경하는 함수
   function handleSort(column) {
     if (sortColumn === column) {
       sortDirection = sortDirection === "asc" ? "desc" : "asc";
@@ -223,10 +229,22 @@
       sortDirection = "asc";
     }
   }
+  // 필터링된 이미지 리스트가 있을 때 연월을 기준으로 정렬
   $: sortedFilteredImages = [...filteredImages].sort((a, b) => {
     if (!sortColumn) return 0;
     let valA = a[sortColumn];
     let valB = b[sortColumn];
+
+    if (sortColumn === 'month') {
+      // "YYYY-MM" 형식의 문자열을 연도와 월로 분리하여 비교
+      const [yearA, monthA] = valA.split('-').map(Number);
+      const [yearB, monthB] = valB.split('-').map(Number);
+      if (yearA !== yearB) {
+        return sortDirection === "asc" ? yearA - yearB : yearB - yearA;
+      }
+      return sortDirection === "asc" ? monthA - monthB : monthB - monthA;
+    }
+
     if (["price", "remaining", "expectedCustoms"].includes(sortColumn)) {
       valA = Number(valA) || 0;
       valB = Number(valB) || 0;
@@ -366,6 +384,29 @@
       downloading = false;
       return;
     }
+
+    // 테이블 뷰 내의 모든 input과 select 요소를 찾아 span 요소로 대체
+    const editableElements = captureArea.querySelectorAll('input, select');
+    const replacements = [];
+    editableElements.forEach(element => {
+      const span = document.createElement('span');
+      // 요소의 스타일 복사 (필요시 추가 조정)
+      span.style.fontSize = window.getComputedStyle(element).fontSize;
+      span.style.fontFamily = window.getComputedStyle(element).fontFamily;
+      span.style.padding = window.getComputedStyle(element).padding;
+      // 요소 타입에 따라 값을 가져옴
+      if (element.tagName.toLowerCase() === 'input') {
+        span.textContent = element.value;
+      } else if (element.tagName.toLowerCase() === 'select') {
+        const selectedOption = element.options[element.selectedIndex];
+        span.textContent = selectedOption ? selectedOption.textContent : '';
+      }
+      // 요소 바로 앞에 span을 삽입하고 해당 요소는 숨김 처리
+      element.parentNode.insertBefore(span, element);
+      element.style.display = 'none';
+      replacements.push({ element, span });
+    });
+
     try {
       const dataUrl = await domtoimage.toPng(captureArea, { cacheBust: true });
       const link = document.createElement('a');
@@ -375,8 +416,16 @@
     } catch (error) {
       console.error("이미지 저장 실패:", error);
     }
+
+    // 캡처 후 원래 요소 복원
+    replacements.forEach(({ element, span }) => {
+      span.remove();
+      element.style.display = '';
+    });
+
     downloading = false;
   }
+
 
   let sidebarVisible = false;
   function toggleSidebar() {
@@ -698,7 +747,7 @@
               {/if}
               {#if visibleColumns.month}
                 <td>
-                  <select value={img.month} on:blur={(e) => updateImageField(img, 'month', e.target.value)}>
+                  <select bind:value={img.month} on:blur={(e) => updateImageField(img, 'month', e.target.value)}>
                     {#each months as m}
                       <option value={m}>{m}</option>
                     {/each}
