@@ -644,35 +644,52 @@
               <th>이미지</th>
             {/if}
             {#if visibleColumns.month}
-              <th on:click={() => handleSort('month')}>연월</th>
+              <th on:click={() => handleSort('month')}>
+                연월 {sortColumn === 'month' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.description}
-              <th on:click={() => handleSort('description')}>설명</th>
+              <th on:click={() => handleSort('description')}>
+                설명 {sortColumn === 'description' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.status}
-              <th on:click={() => handleSort('status')}>결제 상태</th>
+              <th on:click={() => handleSort('status')}>
+                결제 상태 {sortColumn === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.teamStatus}
-              <th on:click={() => handleSort('teamStatus')}>구매처</th>
+              <th on:click={() => handleSort('teamStatus')}>
+                구매처 {sortColumn === 'teamStatus' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.type}
-              <th on:click={() => handleSort('type')}>종류</th>
+              <th on:click={() => handleSort('type')}>
+                종류 {sortColumn === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.size}
-              <th on:click={() => handleSort('size')}>사이즈</th>
+              <th on:click={() => handleSort('size')}>
+                사이즈 {sortColumn === 'size' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.price}
-              <th on:click={() => handleSort('price')}>금액</th>
+              <th on:click={() => handleSort('price')}>
+                금액 {sortColumn === 'price' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.remaining}
-              <th on:click={() => handleSort('remaining')}>남은 금액</th>
+              <th on:click={() => handleSort('remaining')}>
+                남은 금액 {sortColumn === 'remaining' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
             {#if visibleColumns.expectedCustoms}
-              <th on:click={() => handleSort('expectedCustoms')}>예상 관세</th>
+              <th on:click={() => handleSort('expectedCustoms')}>
+                예상 관세 {sortColumn === 'expectedCustoms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              </th>
             {/if}
           </tr>
           </thead>
-
           <tbody>
           {#each sortedFilteredImages as img}
             <tr>
