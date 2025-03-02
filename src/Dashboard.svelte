@@ -41,7 +41,7 @@
     };
   });
 
-  // 쿠키 저장/불러오기 유틸리티 함수
+  // 쿠키 관련 함수는 그대로 남겨두었지만 이미지 캐싱에만 사용되었으므로 제거합니다.
   function setCookie(name, value, days) {
     let expires = "";
     if (days) {
@@ -65,7 +65,6 @@
   export let user;
   let images = [];
   let imagesLoading = true;
-  $: cacheKey = `cachedImages-${user.uid}`;
 
   let downloading = false;
 
@@ -117,7 +116,6 @@
         loadedImages.push({ ...docSnapshot.data(), id: docSnapshot.id });
       });
       images = loadedImages;
-      setCookie(cacheKey, JSON.stringify(images), 30);
     } catch (error) {
       console.error("이미지 불러오기 실패:", error);
     }
@@ -125,14 +123,7 @@
   }
 
   onMount(() => {
-    const cached = getCookie(cacheKey);
-    if (cached) {
-      images = JSON.parse(cached);
-      imagesLoading = false;
-    }
     loadImages();
-
-    // 기존 단일 정렬 상태를 쿠키에서 불러오던 부분은 다중 정렬 조건에 맞게 확장할 수 있습니다.
     const savedSortCriteria = getCookie(`sortCriteria-${user.uid}`);
     if (savedSortCriteria) {
       try {
@@ -143,7 +134,7 @@
     }
   });
 
-  // 쿠키에 사용자 관련 설정 저장
+  // 쿠키에 사용자 관련 설정 저장 (캐싱은 제외)
   $: if (user) {
     setCookie(`viewMode-${user.uid}`, viewMode, 30);
     setCookie(`sortCriteria-${user.uid}`, JSON.stringify(sortCriteria), 30);
@@ -309,7 +300,6 @@
           await deleteObject(sRef);
         }
         images = images.filter(img => img.id !== image.id);
-        setCookie(cacheKey, JSON.stringify(images), 30);
         await tick();
       } catch (error) {
         console.error("이미지 삭제 실패:", error);
@@ -318,14 +308,12 @@
   }
   function handleImageUpload(event) {
     images = [...images, event.detail];
-    setCookie(cacheKey, JSON.stringify(images), 30);
   }
   async function handleStatusToggled(event) {
     const { image, newStatus } = event.detail;
     try {
       await updateDoc(doc(db, "images", image.id), { status: newStatus });
       images = images.map(img => img.id === image.id ? { ...img, status: newStatus } : img);
-      setCookie(cacheKey, JSON.stringify(images), 30);
     } catch (error) {
       console.error("Status update failed:", error);
     }
@@ -335,7 +323,6 @@
     try {
       await updateDoc(doc(db, "images", image.id), { teamStatus: newTeamStatus });
       images = images.map(img => img.id === image.id ? { ...img, teamStatus: newTeamStatus } : img);
-      setCookie(cacheKey, JSON.stringify(images), 30);
     } catch (error) {
       console.error("Team status update failed:", error);
     }
@@ -344,7 +331,6 @@
     try {
       await updateDoc(doc(db, "images", image.id), { teamStatus: newTeamStatus });
       images = images.map(img => img.id === image.id ? { ...img, teamStatus: newTeamStatus } : img);
-      setCookie(cacheKey, JSON.stringify(images), 30);
     } catch (error) {
       console.error("Team status update failed:", error);
     }
@@ -364,7 +350,6 @@
         await updateDoc(doc(db, "images", id), { month: toMonth });
         imageToMove.month = toMonth;
         images = [...images];
-        setCookie(cacheKey, JSON.stringify(images), 30);
       } catch (error) {
         console.error("이미지 이동 실패:", error);
       }
@@ -468,7 +453,6 @@
     try {
       await updateDoc(doc(db, "images", image.id), { [field]: newValue });
       images = images.map(img => img.id === image.id ? { ...img, [field]: newValue } : img);
-      setCookie(cacheKey, JSON.stringify(images), 30);
     } catch (error) {
       console.error(`Failed to update ${field}:`, error);
     }
@@ -482,13 +466,11 @@
       if (sortCriteria[idx].direction === 'asc') {
         sortCriteria[idx].direction = 'desc';
       } else {
-        // 이미 내림차순 상태라면 조건 제거 (또는 필요에 따라 유지할 수 있음)
         sortCriteria.splice(idx, 1);
       }
     } else {
       sortCriteria.push({ column, direction: 'asc' });
     }
-    // 배열을 재할당하여 Svelte 반응성을 트리거
     sortCriteria = [...sortCriteria];
   }
 </script>
@@ -878,7 +860,6 @@
             await deleteObject(sRef);
           }
           images = images.filter(img => img.id !== id);
-          setCookie(cacheKey, JSON.stringify(images), 30);
           await tick();
           modalVisible = false;
           modalImage = null;
