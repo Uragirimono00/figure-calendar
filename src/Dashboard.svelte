@@ -3,18 +3,79 @@
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-  import { deleteObject, ref as storageRef } from 'firebase/storage';
+  import { deleteObject, ref as storageRef, uploadBytes, getDownloadURL, ref } from 'firebase/storage';
   import { db, storage, auth } from './firebase.js';
   import MonthDropzone from './MonthDropzone.svelte';
   import ImageModal from './ImageModal.svelte';
   import { signOut } from 'firebase/auth';
   import domtoimage from 'dom-to-image';
 
-  // 헤더 표시 여부를 제어할 변수
+  // --- WebP 변환 및 재업로드 관련 함수들 ---
+  // 파일을 WebP로 변환 (캔버스 이용)
+  function convertImageToWebp(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".webp";
+              const webpFile = new File([blob], newFileName, { type: "image/webp" });
+              resolve(webpFile);
+            } else {
+              reject(new Error("Conversion to webp failed"));
+            }
+          }, "image/webp", 0.8);
+        };
+        img.onerror = (err) => reject(err);
+        img.src = e.target.result;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // URL의 pathname 부분을 추출하여 webp 여부 판단
+  function isWebp(url) {
+    try {
+      const path = new URL(url).pathname;
+      return path.endsWith('.webp');
+    } catch (error) {
+      return url.endsWith('.webp');
+    }
+  }
+
+  // 이미지 객체의 src가 webp가 아니라면 재인코딩 후 스토리지에 업로드하고 Firestore 문서를 업데이트
+  async function reencodeAndReuploadImage(image) {
+    if (image.src && !isWebp(image.src)) {
+      try {
+        const response = await fetch(image.src);
+        const blob = await response.blob();
+        const tempFile = new File([blob], "temp", { type: blob.type });
+        const webpFile = await convertImageToWebp(tempFile);
+        const filePath = `images/${image.month}/${Date.now()}_${webpFile.name}`;
+        const storageRefObj = ref(storage, filePath);
+        const snapshot = await uploadBytes(storageRefObj, webpFile);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        await updateDoc(doc(db, "images", image.id), { src: downloadURL, storagePath: snapshot.ref.fullPath });
+        image.src = downloadURL;
+        image.storagePath = snapshot.ref.fullPath;
+      } catch (error) {
+        console.error("재인코딩 및 재업로드 실패:", error);
+      }
+    }
+  }
+
+  // ---------------------------
+  // 헤더 관련 (스크롤/마우스 이동으로 토글)
   let showHeader = true;
   let lastScrollY = 0;
-
-  // 스크롤 이벤트 핸들러: 스크롤 방향에 따라 showHeader 토글
   function handleScroll() {
     const currentScrollY = window.pageYOffset;
     if (currentScrollY > lastScrollY && currentScrollY > 50) {
@@ -24,14 +85,11 @@
     }
     lastScrollY = currentScrollY;
   }
-
-  // 마우스 이동 이벤트 핸들러: 마우스가 상단 근처(예: 50px 미만)에 있으면 헤더 보이게
   function handleMouseMove(event) {
     if (event.clientY < 50) {
       showHeader = true;
     }
   }
-
   onMount(() => {
     window.addEventListener('scroll', handleScroll);
     window.addEventListener('mousemove', handleMouseMove);
@@ -41,7 +99,7 @@
     };
   });
 
-  // 쿠키 관련 함수는 그대로 남겨두었지만 이미지 캐싱에만 사용되었으므로 제거합니다.
+  // 쿠키 관련 함수 (사용자 설정 저장)
   function setCookie(name, value, days) {
     let expires = "";
     if (days) {
@@ -65,20 +123,18 @@
   export let user;
   let images = [];
   let imagesLoading = true;
-
   let downloading = false;
 
-  // 뷰 모드 (grid, single, table)
-  let viewMode = 'grid';
+  // --- 진행률 관련 변수 ---
+  let conversionTotal = 0;
+  let conversionProcessed = 0;
 
-  // 다중 정렬 조건 배열 (우선순위가 높은 순으로 저장됨)
+  // 뷰 모드, 정렬, 컬럼 관련 변수들
+  let viewMode = 'grid';
   let sortCriteria = [];
-  // 뷰 모드가 table일 경우 기본적으로 'month' 컬럼 정렬 조건을 추가합니다.
   $: if (viewMode === 'table' && sortCriteria.length === 0) {
     sortCriteria = [{ column: 'month', direction: 'asc' }];
   }
-
-  // 사용자가 보여줄 테이블 컬럼 (true이면 표시)
   let visibleColumns = {
     src: true,
     month: true,
@@ -106,22 +162,37 @@
     visibleColumns[column] = !visibleColumns[column];
   }
 
+  // --- 이미지 불러오기 및 JPG 등 WebP가 아닌 파일 자동 업데이트 ---
   async function loadImages() {
     imagesLoading = true;
+    conversionTotal = 0;
+    conversionProcessed = 0;
     try {
       const q = query(collection(db, "images"), where("uid", "==", user.uid));
       const querySnapshot = await getDocs(q);
       const loadedImages = [];
+      // 먼저, 변환이 필요한 이미지의 총 개수를 계산합니다.
       querySnapshot.forEach(docSnapshot => {
-        loadedImages.push({ ...docSnapshot.data(), id: docSnapshot.id });
+        const imageData = { ...docSnapshot.data(), id: docSnapshot.id };
+        if (imageData.src && !isWebp(imageData.src)) {
+          conversionTotal++;
+        }
+        loadedImages.push(imageData);
       });
+      // 변환이 필요한 이미지들에 대해 순차적으로 변환 및 업데이트합니다.
+      for (let i = 0; i < loadedImages.length; i++) {
+        let imageData = loadedImages[i];
+        if (imageData.src && !isWebp(imageData.src)) {
+          await reencodeAndReuploadImage(imageData);
+          conversionProcessed++;
+        }
+      }
       images = loadedImages;
     } catch (error) {
       console.error("이미지 불러오기 실패:", error);
     }
     imagesLoading = false;
   }
-
   onMount(() => {
     loadImages();
     const savedSortCriteria = getCookie(`sortCriteria-${user.uid}`);
@@ -133,8 +204,6 @@
       }
     }
   });
-
-  // 쿠키에 사용자 관련 설정 저장 (캐싱은 제외)
   $: if (user) {
     setCookie(`viewMode-${user.uid}`, viewMode, 30);
     setCookie(`sortCriteria-${user.uid}`, JSON.stringify(sortCriteria), 30);
@@ -163,7 +232,7 @@
           ]
           : Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`);
 
-  // 필터 상태들
+  // 필터 변수들
   let filterMonth = "";
   let filterDescription = "";
   let filterStatus = "";
@@ -207,13 +276,11 @@
     expectedCustoms: false
   };
 
-  // 다중 정렬을 위한 함수: 조건 배열을 순회하며 정렬
   $: sortedFilteredImages = [...filteredImages].sort((a, b) => {
     for (const criteria of sortCriteria) {
       const { column, direction } = criteria;
       let valA = a[column];
       let valB = b[column];
-
       if (column === 'month') {
         const [yearA, monthA] = valA.split('-').map(Number);
         const [yearB, monthB] = valB.split('-').map(Number);
@@ -233,7 +300,6 @@
         if (valA < valB) return direction === "asc" ? -1 : 1;
         if (valA > valB) return direction === "asc" ? 1 : -1;
       }
-      // 현재 조건에서 동일하면 다음 조건으로 넘어갑니다.
     }
     return 0;
   });
@@ -362,14 +428,10 @@
       downloading = false;
       return;
     }
-
-    // 모든 태그에 overflow: hidden을 강제하는 스타일 태그를 추가
     const noScrollStyle = document.createElement("style");
     noScrollStyle.id = "no-scroll-style";
     noScrollStyle.innerHTML = `* { overflow: hidden !important; }`;
     document.head.appendChild(noScrollStyle);
-
-    // 테이블 뷰 내의 모든 input과 select 요소를 span으로 대체하는 기존 로직
     const editableElements = captureArea.querySelectorAll('input, select');
     const replacements = [];
     editableElements.forEach(element => {
@@ -387,7 +449,6 @@
       element.style.display = 'none';
       replacements.push({ element, span });
     });
-
     try {
       const dataUrl = await domtoimage.toPng(captureArea, { cacheBust: true });
       const link = document.createElement('a');
@@ -397,19 +458,14 @@
     } catch (error) {
       console.error("이미지 저장 실패:", error);
     }
-
-    // 캡처 후 원래 요소 복원
     replacements.forEach(({ element, span }) => {
       span.remove();
       element.style.display = '';
     });
-
-    // 추가한 no-scroll 스타일 제거
     const existingNoScrollStyle = document.getElementById("no-scroll-style");
     if (existingNoScrollStyle) {
       existingNoScrollStyle.remove();
     }
-
     downloading = false;
   }
 
@@ -426,29 +482,21 @@
     const num = Number(n);
     return isNaN(num) ? "0" : num.toLocaleString();
   }
-
-  // 확장된 visibleColumns
   visibleColumns = {
     ...visibleColumns,
     type: visibleColumns.type ?? true,
     size: visibleColumns.size ?? true
   };
-
-  // 확장된 filterVisible
   filterVisible = {
     ...filterVisible,
     type: false,
     size: false
   };
-
-  // 새로운 드롭다운 옵션 (필터용)
   const typeOptions = ["", "PVC", "레진"];
   const sizeOptions = ["", "1/1", "1/1.5", "1/2", "1/2.5", "1/3", "1/3.5", "1/4", "1/4.5", "1/5", "1/5.5", "1/6", "1/6.5", "1/7", "1/7.5", "1/8", "1/8.5", "1/9", "1/9.5", "1/10", "1/10.5", "1/11", "1/11.5", "1/12"];
-
   const statusOptions = ["", "예약금", "전액", "꼴림"];
   const teamStatusOptions = ["", "코아", "매하", "히탐", "래빗츠", "유메", "위북", "드리머", "중고"];
 
-  // 인라인 편집 시 DB에 저장하는 헬퍼 함수
   async function updateImageField(image, field, newValue) {
     try {
       await updateDoc(doc(db, "images", image.id), { [field]: newValue });
@@ -458,8 +506,6 @@
     }
   }
 
-  // 다중 정렬 조건을 업데이트하는 함수
-  // 이미 존재하는 컬럼이면 방향을 토글하고, 2번째 클릭 시 조건에서 제거합니다.
   function handleSort(column) {
     const idx = sortCriteria.findIndex(c => c.column === column);
     if (idx !== -1) {
@@ -513,7 +559,11 @@
 {#if imagesLoading}
   <div class="dashboard-loading">
     <div class="spinner"></div>
-    <p>이미지를 불러오는 중...</p>
+    {#if conversionTotal > 0}
+      <p>파일 용량 압축을 위한 WebP 인코딩 작업 진행 중 ({conversionProcessed} / {conversionTotal})</p>
+    {:else}
+      <p>이미지를 불러오는 중...</p>
+    {/if}
   </div>
 {/if}
 

@@ -39,11 +39,55 @@
         return "";
     }
 
+    // --- WebP 변환 함수 ---
+    // 캔버스를 사용해 이미지 파일을 webp 형식으로 변환합니다.
+    function convertImageToWebp(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".webp";
+                            const webpFile = new File([blob], newFileName, { type: "image/webp" });
+                            resolve(webpFile);
+                        } else {
+                            reject(new Error("webp 변환에 실패했습니다."));
+                        }
+                    }, "image/webp", 0.8);
+                };
+                img.onerror = (err) => reject(err);
+                img.src = e.target.result;
+            };
+            reader.onerror = (err) => reject(err);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // --- 이미지 업로드 처리 ---
+    // 파일 업로드 전 webp 형식이 아니라면 변환 후 업로드합니다.
     async function processFiles(files) {
         uploading = true;
         const uploadPromises = [];
         for (let i = 0; i < files.length; i++) {
-            const file = files[i];
+            let file = files[i];
+
+            // 파일의 타입이 webp가 아니라면 변환
+            if (file.type !== "image/webp") {
+                try {
+                    file = await convertImageToWebp(file);
+                } catch (error) {
+                    console.error("webp 변환 실패:", error);
+                    continue; // 변환 실패한 파일은 건너뜁니다.
+                }
+            }
+
             const filePath = `images/${month}/${Date.now()}_${file.name}`;
             const storageRefObj = ref(storage, filePath);
 
@@ -65,12 +109,38 @@
                     dispatch('imageUploaded', imageDataWithId);
                 })
                 .catch((error) => {
-                    console.error("Upload failed", error);
+                    console.error("업로드 실패", error);
                 });
             uploadPromises.push(uploadPromise);
         }
         await Promise.all(uploadPromises);
         uploading = false;
+    }
+
+    // --- 불러온 이미지가 webp가 아니라면 재인코딩 및 재업로드 ---
+    async function reencodeAndReuploadImage(image) {
+        // 간단하게 URL 끝에 .webp가 붙어있는지 확인 (더 정교한 방법이 필요할 수 있음)
+        if (!image.src.endsWith(".webp")) {
+            try {
+                const response = await fetch(image.src);
+                const blob = await response.blob();
+                const tempFile = new File([blob], "temp", { type: blob.type });
+                const webpFile = await convertImageToWebp(tempFile);
+                const filePath = `images/${month}/${Date.now()}_${webpFile.name}`;
+                const storageRefObj = ref(storage, filePath);
+                const snapshot = await uploadBytes(storageRefObj, webpFile);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+
+                // 필요한 경우 Firestore 문서 업데이트 코드 추가
+                // 예: await updateDoc(doc(db, "images", image.id), { src: downloadURL, storagePath: snapshot.ref.fullPath });
+
+                // 앱 내 이미지 데이터 갱신
+                image.src = downloadURL;
+                image.storagePath = snapshot.ref.fullPath;
+            } catch (error) {
+                console.error("재업로드 실패:", error);
+            }
+        }
     }
 
     function handleDragOver(event) {
