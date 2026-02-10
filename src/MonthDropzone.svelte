@@ -12,13 +12,11 @@
     let fileInput;
 
     let uploading = false;
+    let dragOver = false;
 
-    // 기존 결제 상태 목록
     const paymentStatuses = ["예약금", "전액", "꼴림"];
-    // 새로운 팀 상태 목록 (드리머 추가)
     const teamStatuses = ["코아", "매하", "히탐", "래빗츠", "유메", "위북", "드리머", "중고"];
 
-    // 결제 상태에 따른 CSS 클래스 반환
     function getStatusClass(status) {
         if (status === "예약금") return "status-reserve";
         if (status === "전액") return "status-full";
@@ -26,7 +24,6 @@
         return "";
     }
 
-    // 팀 상태에 따른 CSS 클래스 반환
     function getTeamStatusClass(teamStatus) {
         if (teamStatus === "코아") return "status-koa";
         if (teamStatus === "매하") return "status-maeha";
@@ -39,8 +36,6 @@
         return "";
     }
 
-    // --- WebP 변환 함수 ---
-    // 캔버스를 사용해 이미지 파일을 webp 형식으로 변환합니다.
     function convertImageToWebp(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -70,31 +65,24 @@
         });
     }
 
-    // --- 이미지 업로드 처리 ---
-    // 파일 업로드 전 webp 형식이 아니라면 변환 후 업로드합니다.
     async function processFiles(files) {
         uploading = true;
         const uploadPromises = [];
         for (let i = 0; i < files.length; i++) {
             let file = files[i];
-
-            // 파일의 타입이 webp가 아니라면 변환
             if (file.type !== "image/webp") {
                 try {
                     file = await convertImageToWebp(file);
                 } catch (error) {
                     console.error("webp 변환 실패:", error);
-                    continue; // 변환 실패한 파일은 건너뜁니다.
+                    continue;
                 }
             }
-
             const filePath = `images/${month}/${Date.now()}_${file.name}`;
             const storageRefObj = ref(storage, filePath);
-
             const uploadPromise = uploadBytes(storageRefObj, file)
                 .then(async (snapshot) => {
                     const downloadURL = await getDownloadURL(snapshot.ref);
-                    // 업로드 시 기본 결제 상태는 "예약금", 팀 상태는 "코아"로 설정
                     const imageData = {
                         src: downloadURL,
                         month,
@@ -117,9 +105,7 @@
         uploading = false;
     }
 
-    // --- 불러온 이미지가 webp가 아니라면 재인코딩 및 재업로드 ---
     async function reencodeAndReuploadImage(image) {
-        // 간단하게 URL 끝에 .webp가 붙어있는지 확인 (더 정교한 방법이 필요할 수 있음)
         if (!image.src.endsWith(".webp")) {
             try {
                 const response = await fetch(image.src);
@@ -130,11 +116,6 @@
                 const storageRefObj = ref(storage, filePath);
                 const snapshot = await uploadBytes(storageRefObj, webpFile);
                 const downloadURL = await getDownloadURL(snapshot.ref);
-
-                // 필요한 경우 Firestore 문서 업데이트 코드 추가
-                // 예: await updateDoc(doc(db, "images", image.id), { src: downloadURL, storagePath: snapshot.ref.fullPath });
-
-                // 앱 내 이미지 데이터 갱신
                 image.src = downloadURL;
                 image.storagePath = snapshot.ref.fullPath;
             } catch (error) {
@@ -146,11 +127,17 @@
     function handleDragOver(event) {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
+        dragOver = true;
+    }
+
+    function handleDragLeave() {
+        dragOver = false;
     }
 
     function handleDrop(event) {
         event.preventDefault();
         event.stopPropagation();
+        dragOver = false;
 
         const fileList = event.dataTransfer.files;
         if (fileList && fileList.length > 0) {
@@ -210,16 +197,31 @@
 </script>
 
 <div class="month-dropzone"
+     class:drag-over={dragOver}
      on:dragover={handleDragOver}
+     on:dragleave={handleDragLeave}
      on:drop={handleDrop}
      on:click={handleClick}
      tabindex="0" role="button"
      on:keydown={(event) => { if(event.key === 'Enter') handleClick(); }}>
-    <h3>{month}</h3>
+
+    <div class="month-header">
+        <span class="month-badge">{month}</span>
+        {#if images.length > 0}
+            <span class="image-count">{images.length}</span>
+        {/if}
+    </div>
 
     {#if uploading}
         <div class="loading-overlay">
             <div class="spinner"></div>
+        </div>
+    {/if}
+
+    {#if images.length === 0 && !uploading}
+        <div class="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span>이미지 업로드</span>
         </div>
     {/if}
 
@@ -228,9 +230,17 @@
             <div class="image-container"
                  draggable="true"
                  on:dragstart={(event) => handleImageDragStart(img, event)}>
-                <button class="delete-button" on:click={(event) => handleDelete(img, event)} title="이미지 삭제">×</button>
+                <button class="delete-button" on:click={(event) => handleDelete(img, event)} title="이미지 삭제">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
                 <button class="image-button" on:click={(event) => handleImageClick(img, event)}>
-                    <img src={img.src} alt="Uploaded image" />
+                    <img src={img.src} alt="Uploaded image" on:error={(e) => { e.target.src = ''; e.target.classList.add('img-error'); }} />
+                    <div class="image-overlay"></div>
+                    {#if img.purchaseStatus === "찜"}
+                        <div class="wishlist-badge">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        </div>
+                    {/if}
                     <div class="status-label payment-label {getStatusClass(img.status)}" on:click={(event) => toggleStatus(img, event)}>
                         {img.status}
                     </div>
@@ -241,62 +251,97 @@
             </div>
         {/each}
     </div>
-    <p class="hint">드래그앤드롭 또는 클릭하여 이미지를 업로드하세요</p>
     <input type="file" accept="image/*" multiple bind:this={fileInput} on:change={handleFileChange} style="display:none" />
 </div>
 
 <style>
-    .images-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-        gap: 0.5rem;
-        margin-top: 1rem;
-        max-width: 100%;
-    }
     .month-dropzone {
         position: relative;
-        border: 2px dashed #ccc;
-        border-radius: 8px;
-        padding: 1rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-3);
         text-align: center;
-        min-height: 200px;
+        min-height: 180px;
         cursor: pointer;
-        transition: background-color 0.3s ease, color 0.3s ease;
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        flex-direction: column;
     }
     .month-dropzone:hover {
-        background-color: #f9f9f9;
+        border-color: var(--color-border-hover);
+        box-shadow: var(--shadow);
     }
-    :global(html) .month-dropzone {
-        color: inherit;
+    .month-dropzone.drag-over {
+        border-color: var(--color-primary);
+        background: var(--color-primary-bg);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
-    :global(html.dark) .month-dropzone {
-        background-color: #2c2c2c;
-        color: #fff;
+    .month-header {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
     }
-    :global(html.dark) .month-dropzone:hover {
-        background-color: #f0f0f0;
-        color: #333;
+    .month-badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-primary);
+        background: var(--color-primary-bg);
+        padding: 2px var(--space-2);
+        border-radius: var(--radius-full);
+    }
+    .image-count {
+        font-size: 0.6875rem;
+        color: var(--color-text-muted);
+        background: var(--color-surface-hover);
+        padding: 1px 6px;
+        border-radius: var(--radius-full);
+    }
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        flex: 1;
+        color: var(--color-text-muted);
+        padding: var(--space-6) 0;
+    }
+    .empty-state span {
+        font-size: 0.75rem;
+    }
+    .images-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: var(--space-2);
+        max-width: 100%;
     }
     .image-container {
         position: relative;
+        border-radius: var(--radius);
+        overflow: hidden;
     }
     .delete-button {
         position: absolute;
-        top: 2px;
-        left: 2px;
-        background: rgba(255, 0, 0, 0.7);
+        top: 4px;
+        left: 4px;
+        width: 20px;
+        height: 20px;
+        background: rgba(239, 68, 68, 0.9);
         border: none;
         color: white;
-        font-size: 1.2rem;
-        line-height: 1;
-        padding: 0 4px;
-        border-radius: 50%;
+        border-radius: var(--radius-full);
         cursor: pointer;
         display: none;
         z-index: 2;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
     }
     .image-container:hover .delete-button {
-        display: block;
+        display: flex;
     }
     .image-button {
         background: none;
@@ -305,15 +350,54 @@
         cursor: pointer;
         width: 100%;
         position: relative;
+        display: block;
     }
     .image-button:focus {
-        outline: 2px solid blue;
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+        border-radius: var(--radius);
+    }
+    .image-overlay {
+        position: absolute;
+        inset: 0;
+        background: transparent;
+        transition: background var(--transition-fast);
+    }
+    .image-container:hover .image-overlay {
+        background: rgba(0, 0, 0, 0.08);
     }
     img {
         width: 100%;
         height: auto;
         object-fit: cover;
         display: block;
+        border-radius: var(--radius);
+        transition: transform var(--transition);
+    }
+    .image-container:hover img {
+        transform: scale(1.03);
+    }
+    .wishlist-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 22px;
+        height: 22px;
+        background: rgba(239, 68, 68, 0.9);
+        color: white;
+        border-radius: var(--radius-full);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        backdrop-filter: blur(4px);
+    }
+    :global(img.img-error) {
+        min-height: 80px;
+        background: var(--color-surface-hover);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .payment-label {
         position: absolute;
@@ -326,92 +410,56 @@
         right: 4px;
     }
     .status-label {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.8rem;
-        border-radius: 4px;
-        transition: background-color 0.3s ease, color 0.3s ease;
+        padding: 1px 6px;
+        font-size: 0.625rem;
+        font-weight: 600;
+        border-radius: var(--radius-full);
+        transition: all var(--transition-fast);
+        backdrop-filter: blur(4px);
     }
     .status-reserve {
-        background-color: #3498db;
+        background-color: rgba(37, 99, 235, 0.9);
         color: #fff;
     }
     .status-full {
-        background-color: #27ae60;
+        background-color: rgba(34, 197, 94, 0.9);
         color: #fff;
     }
     .status-kkolim {
-        background-color: #e67e22;
+        background-color: rgba(245, 158, 11, 0.9);
         color: #fff;
     }
     .status-koa {
-        background-color: #8e44ad;
+        background-color: rgba(139, 92, 246, 0.9);
         color: #fff;
     }
     .status-maeha {
-        background-color: #d35400;
+        background-color: rgba(249, 115, 22, 0.9);
         color: #fff;
     }
     .status-hitam {
-        background-color: #27ae60;
+        background-color: rgba(16, 185, 129, 0.9);
         color: #fff;
     }
     .status-rabbits {
-        background-color: #2980b9;
+        background-color: rgba(59, 130, 246, 0.9);
         color: #fff;
     }
     .status-yume {
-        background-color: #f39c12;
+        background-color: rgba(234, 179, 8, 0.9);
         color: #fff;
     }
     .status-wibuk {
-        background-color: #c0392b;
+        background-color: rgba(239, 68, 68, 0.9);
         color: #fff;
     }
     .status-dreamer {
-        background-color: #e91e63;
+        background-color: rgba(236, 72, 153, 0.9);
         color: #fff;
     }
     .status-junggu {
-        background-color: #7f8c8d;
+        background-color: rgba(107, 114, 128, 0.9);
         color: #fff;
-    }
-    :global(html.dark) .status-junggu {
-        background-color: #95a5a6;
-    }
-    :global(html.dark) .status-reserve {
-        background-color: #2980b9;
-    }
-    :global(html.dark) .status-full {
-        background-color: #1e8449;
-    }
-    :global(html.dark) .status-kkolim {
-        background-color: #d35400;
-    }
-    :global(html.dark) .status-koa {
-        background-color: #7d3c98;
-    }
-    :global(html.dark) .status-maeha {
-        background-color: #ba4a00;
-    }
-    :global(html.dark) .status-hitam {
-        background-color: #229954;
-    }
-    :global(html.dark) .status-rabbits {
-        background-color: #2471a3;
-    }
-    :global(html.dark) .status-yume {
-        background-color: #e67e22;
-    }
-    :global(html.dark) .status-wibuk {
-        background-color: #a93226;
-    }
-    :global(html.dark) .status-dreamer {
-        background-color: #c2185b;
-    }
-    .hint {
-        margin-top: 1rem;
-        font-size: 0.9rem;
-        color: #666;
     }
     .loading-overlay {
         position: absolute;
@@ -419,19 +467,20 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(255,255,255,0.7);
+        background: var(--color-overlay);
         display: flex;
         justify-content: center;
         align-items: center;
         z-index: 10;
+        border-radius: var(--radius-lg);
     }
     .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #3498db;
+        border: 3px solid var(--color-border);
+        border-top: 3px solid var(--color-primary);
         border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
+        width: 32px;
+        height: 32px;
+        animation: spin 0.8s linear infinite;
     }
     @keyframes spin {
         0% { transform: rotate(0deg); }

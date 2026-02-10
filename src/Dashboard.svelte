@@ -7,11 +7,11 @@
   import { db, storage, auth } from './firebase.js';
   import MonthDropzone from './MonthDropzone.svelte';
   import ImageModal from './ImageModal.svelte';
+  import UrlImport from './UrlImport.svelte';
   import { signOut } from 'firebase/auth';
   import domtoimage from 'dom-to-image';
 
   // --- WebP 변환 및 재업로드 관련 함수들 ---
-  // 파일을 WebP로 변환 (캔버스 이용)
   function convertImageToWebp(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -41,7 +41,6 @@
     });
   }
 
-  // URL의 pathname 부분을 추출하여 webp 여부 판단
   function isWebp(url) {
     try {
       const path = new URL(url).pathname;
@@ -51,7 +50,6 @@
     }
   }
 
-  // 이미지 객체의 src가 webp가 아니라면 재인코딩 후 스토리지에 업로드하고 Firestore 문서를 업데이트
   async function reencodeAndReuploadImage(image) {
     if (image.src && !isWebp(image.src)) {
       try {
@@ -72,8 +70,7 @@
     }
   }
 
-  // ---------------------------
-  // 헤더 관련 (스크롤/마우스 이동으로 토글)
+  // 헤더 관련
   let showHeader = true;
   let lastScrollY = 0;
   function handleScroll() {
@@ -99,7 +96,7 @@
     };
   });
 
-  // 쿠키 관련 함수 (사용자 설정 저장)
+  // 쿠키 관련
   function setCookie(name, value, days) {
     let expires = "";
     if (days) {
@@ -124,12 +121,11 @@
   let images = [];
   let imagesLoading = true;
   let downloading = false;
+  let urlImportOpen = false;
 
-  // --- 진행률 관련 변수 ---
   let conversionTotal = 0;
   let conversionProcessed = 0;
 
-  // 뷰 모드, 정렬, 컬럼 관련 변수들
   let viewMode = 'grid';
   let sortCriteria = [];
   $: if (viewMode === 'table' && sortCriteria.length === 0) {
@@ -139,6 +135,7 @@
     src: true,
     month: true,
     description: true,
+    purchaseStatus: true,
     status: true,
     teamStatus: true,
     type: true,
@@ -162,7 +159,6 @@
     visibleColumns[column] = !visibleColumns[column];
   }
 
-  // --- 이미지 불러오기 및 JPG 등 WebP가 아닌 파일 자동 업데이트 ---
   async function loadImages() {
     imagesLoading = true;
     conversionTotal = 0;
@@ -171,7 +167,6 @@
       const q = query(collection(db, "images"), where("uid", "==", user.uid));
       const querySnapshot = await getDocs(q);
       const loadedImages = [];
-      // 먼저, 변환이 필요한 이미지의 총 개수를 계산합니다.
       querySnapshot.forEach(docSnapshot => {
         const imageData = { ...docSnapshot.data(), id: docSnapshot.id };
         if (imageData.src && !isWebp(imageData.src)) {
@@ -179,7 +174,6 @@
         }
         loadedImages.push(imageData);
       });
-      // 변환이 필요한 이미지들에 대해 순차적으로 변환 및 업데이트합니다.
       for (let i = 0; i < loadedImages.length; i++) {
         let imageData = loadedImages[i];
         if (imageData.src && !isWebp(imageData.src)) {
@@ -232,9 +226,14 @@
           ]
           : Array.from({ length: 12 }, (_, i) => `${selectedYear}-${String(i + 1).padStart(2, '0')}`);
 
+  function handleUrlImported(event) {
+    images = [...images, event.detail];
+  }
+
   // 필터 변수들
   let filterMonth = "";
   let filterDescription = "";
+  let filterPurchaseStatus = "";
   let filterStatus = "";
   let filterTeamStatus = "";
   let filterType = "";
@@ -250,8 +249,10 @@
     const price = Number(img.price) || 0;
     const remaining = Number(img.remaining) || 0;
     const expectedCustoms = Number(img.expectedCustoms) || 0;
+    const imgPurchaseStatus = img.purchaseStatus || "구매";
     return (!filterMonth || img.month.includes(filterMonth))
             && (!filterDescription || img.description.includes(filterDescription))
+            && (!filterPurchaseStatus || imgPurchaseStatus === filterPurchaseStatus)
             && (!filterStatus || img.status === filterStatus)
             && (!filterTeamStatus || img.teamStatus === filterTeamStatus)
             && (!filterType || img.type === filterType)
@@ -267,6 +268,7 @@
   let filterVisible = {
     month: false,
     description: false,
+    purchaseStatus: false,
     status: false,
     teamStatus: false,
     type: false,
@@ -275,6 +277,9 @@
     remaining: false,
     expectedCustoms: false
   };
+
+  let filterPanelOpen = false;
+  let columnPanelOpen = false;
 
   $: sortedFilteredImages = [...filteredImages].sort((a, b) => {
     for (const criteria of sortCriteria) {
@@ -333,10 +338,13 @@
     modalVisible = true;
   }
   async function handleModalSave(event) {
-    const { description, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate } = event.detail;
+    const { description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, remaining, expectedCustoms, purchaseDate } = event.detail;
     modalImage.description = description;
     modalImage.status = status;
     modalImage.teamStatus = teamStatus;
+    modalImage.purchaseStatus = purchaseStatus;
+    modalImage.manufacturer = manufacturer;
+    modalImage.releaseDate = releaseDate;
     modalImage.type = type;
     modalImage.size = size;
     modalImage.price = price;
@@ -346,7 +354,7 @@
     images = [...images];
     try {
       await updateDoc(doc(db, "images", modalImage.id), {
-        description, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate
+        description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, remaining, expectedCustoms, purchaseDate
       });
     } catch (error) {
       console.error("저장 실패:", error);
@@ -485,13 +493,16 @@
   visibleColumns = {
     ...visibleColumns,
     type: visibleColumns.type ?? true,
-    size: visibleColumns.size ?? true
+    size: visibleColumns.size ?? true,
+    purchaseStatus: visibleColumns.purchaseStatus ?? true
   };
   filterVisible = {
     ...filterVisible,
     type: false,
-    size: false
+    size: false,
+    purchaseStatus: false
   };
+  const purchaseStatusOptions = ["", "구매", "찜"];
   const typeOptions = ["", "PVC", "레진"];
   const sizeOptions = ["", "1/1", "1/1.5", "1/2", "1/2.5", "1/3", "1/3.5", "1/4", "1/4.5", "1/5", "1/5.5", "1/6", "1/6.5", "1/7", "1/7.5", "1/8", "1/8.5", "1/9", "1/9.5", "1/10", "1/10.5", "1/11", "1/11.5", "1/12"];
   const statusOptions = ["", "예약금", "전액", "꼴림"];
@@ -519,38 +530,119 @@
     }
     sortCriteria = [...sortCriteria];
   }
+
+  const columnLabels = {
+    src: '이미지',
+    month: '연월',
+    description: '설명',
+    purchaseStatus: '구매 상태',
+    status: '결제 상태',
+    teamStatus: '구매처',
+    type: '종류',
+    size: '사이즈',
+    price: '금액',
+    remaining: '남은 금액',
+    expectedCustoms: '예상 관세'
+  };
+
+  const filterLabels = {
+    month: '연월',
+    description: '설명',
+    purchaseStatus: '구매 상태',
+    status: '결제 상태',
+    teamStatus: '구매처',
+    type: '종류',
+    size: '사이즈',
+    price: '금액',
+    remaining: '남은 금액',
+    expectedCustoms: '예상 관세'
+  };
 </script>
 
 {#if user}
   <header class="dashboard-header" class:hide={!showHeader}>
-    <div class="view-switch">
-      <button on:click={() => viewMode = 'grid'} class:selected={viewMode==='grid'} title="연도로보기">📆</button>
-      <button on:click={() => viewMode = 'single'} class:selected={viewMode==='single'} title="월로보기">📅</button>
-      <button on:click={() => viewMode = 'table'} class:selected={viewMode==='table'} title="표로보기">📋</button>
-    </div>
-    <div class="mobile-header">
-      <button class="hamburger" on:click={toggleSidebar}>&#9776;</button>
+    <div class="header-inner">
+      <div class="view-switch">
+        <button on:click={() => viewMode = 'grid'} class:active={viewMode==='grid'} title="연도로보기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="view-label">그리드</span>
+        </button>
+        <button on:click={() => viewMode = 'single'} class:active={viewMode==='single'} title="월로보기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="view-label">월별</span>
+        </button>
+        <button on:click={() => viewMode = 'table'} class:active={viewMode==='table'} title="표로보기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span class="view-label">테이블</span>
+        </button>
+      </div>
+      <div class="header-actions">
+        <button class="url-import-btn" on:click={() => urlImportOpen = true} title="URL 추가">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="url-label">URL 추가</span>
+        </button>
+        <button class="hamburger" on:click={toggleSidebar} title="메뉴">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 
   {#if sidebarVisible}
     <div class="sidebar-backdrop" on:click={toggleSidebar}></div>
-    <aside class="sidebar" transition:fly={{ x: 300, duration: 300 }}>
-      <button class="close-btn" on:click={toggleSidebar}>×</button>
-      <button on:click={handleLogout} class="logout-button">로그아웃</button>
-      <button on:click={saveDashboardImage} class="save-image-button" disabled={downloading}>
-        {#if downloading}
-          <span class="spinner-button"></span>
-          저장중...
-        {:else}
-          대시보드 이미지 저장
-        {/if}
-      </button>
-      <div class="totals">
-        <span>금액: {formatNumber(totalPrice)}원</span>
-        <span>남은 금액: {formatNumber(totalRemaining)}원</span>
-        <span>예상 관세: {formatNumber(totalCustoms)}원</span>
-        <span>전체 합계: {formatNumber(overallTotal)}원</span>
+    <aside class="sidebar" transition:fly={{ x: 320, duration: 250 }}>
+      <div class="sidebar-header">
+        <h3>메뉴</h3>
+        <button class="close-btn" on:click={toggleSidebar}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="user-avatar">
+          {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+        </div>
+        <div class="user-info">
+          <span class="user-email">{user.email || '사용자'}</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <h4>금액 요약</h4>
+        <div class="totals-grid">
+          <div class="total-card">
+            <span class="total-label">금액</span>
+            <span class="total-value">{formatNumber(totalPrice)}원</span>
+          </div>
+          <div class="total-card">
+            <span class="total-label">남은 금액</span>
+            <span class="total-value">{formatNumber(totalRemaining)}원</span>
+          </div>
+          <div class="total-card">
+            <span class="total-label">예상 관세</span>
+            <span class="total-value">{formatNumber(totalCustoms)}원</span>
+          </div>
+          <div class="total-card total-card-accent">
+            <span class="total-label">전체 합계</span>
+            <span class="total-value">{formatNumber(overallTotal)}원</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-actions">
+        <button on:click={saveDashboardImage} class="sidebar-btn btn-save" disabled={downloading}>
+          {#if downloading}
+            <span class="spinner-button"></span>
+            저장중...
+          {:else}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            이미지 저장
+          {/if}
+        </button>
+        <button on:click={handleLogout} class="sidebar-btn btn-logout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          로그아웃
+        </button>
       </div>
     </aside>
   {/if}
@@ -558,25 +650,34 @@
 
 {#if imagesLoading}
   <div class="dashboard-loading">
-    <div class="spinner"></div>
-    {#if conversionTotal > 0}
-      <p>파일 용량 압축을 위한 WebP 인코딩 작업 진행 중 ({conversionProcessed} / {conversionTotal})</p>
-    {:else}
-      <p>이미지를 불러오는 중...</p>
-    {/if}
+    <div class="loading-content">
+      <div class="spinner"></div>
+      {#if conversionTotal > 0}
+        <p class="loading-text">WebP 인코딩 중... ({conversionProcessed} / {conversionTotal})</p>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: {conversionTotal > 0 ? (conversionProcessed / conversionTotal * 100) : 0}%"></div>
+        </div>
+      {:else}
+        <p class="loading-text">이미지를 불러오는 중...</p>
+      {/if}
+    </div>
   </div>
 {/if}
 
 <div class="dashboard">
   {#if viewMode !== 'table'}
     <div class="year-control">
-      <button on:click={prevYear} disabled={parseInt(selectedYear) <= startYear}>←</button>
-      <select bind:value={selectedYear}>
+      <button class="year-btn" on:click={prevYear} disabled={parseInt(selectedYear) <= startYear}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <select class="year-select" bind:value={selectedYear}>
         {#each Array.from({ length: (endYear - startYear + 1) }, (_, i) => (startYear + i).toString()) as yearOption}
           <option value={yearOption}>{yearOption}</option>
         {/each}
       </select>
-      <button on:click={nextYear} disabled={parseInt(selectedYear) >= endYear}>→</button>
+      <button class="year-btn" on:click={nextYear} disabled={parseInt(selectedYear) >= endYear}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
     </div>
   {/if}
 
@@ -609,9 +710,13 @@
     {:else if viewMode === 'single'}
       <div class="single-view">
         <div class="navigation">
-          <button on:click={prevMonth} disabled={currentMonthIndex === 0}>←</button>
-          <span>{months[currentMonthIndex]}</span>
-          <button on:click={nextMonth} disabled={currentMonthIndex === months.length - 1}>→</button>
+          <button class="nav-btn" on:click={prevMonth} disabled={currentMonthIndex === 0}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span class="nav-month">{months[currentMonthIndex]}</span>
+          <button class="nav-btn" on:click={nextMonth} disabled={currentMonthIndex === months.length - 1}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
         <div class="month-single">
           <MonthDropzone
@@ -628,24 +733,31 @@
       </div>
     {:else if viewMode === 'table'}
       <div class="table-view-container">
-        <div class="table-controls">
-          <div class="filter-section">
-            <div class="filter-icons">
-              <button class:active={filterVisible.month} on:click={(e) => { e.target.blur(); filterVisible.month = !filterVisible.month; }} title="연월 필터">📅</button>
-              <button class:active={filterVisible.description} on:click={(e) => { e.target.blur(); filterVisible.description = !filterVisible.description; }} title="설명 필터">💬</button>
-              <button class:active={filterVisible.status} on:click={(e) => { e.target.blur(); filterVisible.status = !filterVisible.status; }} title="결제 상태 필터">🔘</button>
-              <button class:active={filterVisible.teamStatus} on:click={(e) => { e.target.blur(); filterVisible.teamStatus = !filterVisible.teamStatus; }} title="구매처 필터">👥</button>
-              <button class:active={filterVisible.type} on:click={(e) => { e.target.blur(); filterVisible.type = !filterVisible.type; }} title="종류 필터">📦</button>
-              <button class:active={filterVisible.size} on:click={(e) => { e.target.blur(); filterVisible.size = !filterVisible.size; }} title="사이즈 필터">📏</button>
-              <button class:active={filterVisible.price} on:click={(e) => { e.target.blur(); filterVisible.price = !filterVisible.price; }} title="금액 필터">💲</button>
-              <button class:active={filterVisible.remaining} on:click={(e) => { e.target.blur(); filterVisible.remaining = !filterVisible.remaining; }} title="남은 금액 필터">💰</button>
-              <button class:active={filterVisible.expectedCustoms} on:click={(e) => { e.target.blur(); filterVisible.expectedCustoms = !filterVisible.expectedCustoms; }} title="예상 관세 필터">📦</button>
+        <div class="table-toolbar">
+          <button class="toolbar-btn" class:active={filterPanelOpen} on:click={() => filterPanelOpen = !filterPanelOpen}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            필터
+          </button>
+          <button class="toolbar-btn" class:active={columnPanelOpen} on:click={() => columnPanelOpen = !columnPanelOpen}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+            컬럼
+          </button>
+        </div>
+
+        {#if filterPanelOpen}
+          <div class="panel filter-panel">
+            <div class="filter-chips">
+              {#each Object.entries(filterLabels) as [key, label]}
+                <button class="chip" class:active={filterVisible[key]} on:click={() => filterVisible[key] = !filterVisible[key]}>
+                  {label}
+                </button>
+              {/each}
             </div>
-            <div class="filter-inputs">
+            <div class="filter-fields">
               {#if filterVisible.month}
-                <div class="filter-input">
-                  <label>연월:</label>
-                  <input type="text" bind:value={filterMonth} placeholder="연월 선택" list="monthList" />
+                <div class="filter-field">
+                  <label>연월</label>
+                  <input type="text" bind:value={filterMonth} placeholder="연월 검색" list="monthList" />
                   <datalist id="monthList">
                     {#each months as m}
                       <option value={m} />
@@ -654,14 +766,24 @@
                 </div>
               {/if}
               {#if filterVisible.description}
-                <div class="filter-input">
-                  <label>설명:</label>
-                  <input type="text" bind:value={filterDescription} placeholder="설명 필터" />
+                <div class="filter-field">
+                  <label>설명</label>
+                  <input type="text" bind:value={filterDescription} placeholder="설명 검색" />
+                </div>
+              {/if}
+              {#if filterVisible.purchaseStatus}
+                <div class="filter-field">
+                  <label>구매 상태</label>
+                  <select bind:value={filterPurchaseStatus}>
+                    {#each purchaseStatusOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
                 </div>
               {/if}
               {#if filterVisible.status}
-                <div class="filter-input">
-                  <label>결제 상태:</label>
+                <div class="filter-field">
+                  <label>결제 상태</label>
                   <select bind:value={filterStatus}>
                     {#each statusOptions as opt}
                       <option value={opt}>{opt === "" ? "전체" : opt}</option>
@@ -670,8 +792,8 @@
                 </div>
               {/if}
               {#if filterVisible.teamStatus}
-                <div class="filter-input">
-                  <label>구매처:</label>
+                <div class="filter-field">
+                  <label>구매처</label>
                   <select bind:value={filterTeamStatus}>
                     {#each teamStatusOptions as opt}
                       <option value={opt}>{opt === "" ? "전체" : opt}</option>
@@ -680,8 +802,8 @@
                 </div>
               {/if}
               {#if filterVisible.type}
-                <div class="filter-input">
-                  <label>종류:</label>
+                <div class="filter-field">
+                  <label>종류</label>
                   <select bind:value={filterType}>
                     {#each typeOptions as opt}
                       <option value={opt}>{opt === "" ? "전체" : opt}</option>
@@ -690,8 +812,8 @@
                 </div>
               {/if}
               {#if filterVisible.size}
-                <div class="filter-input">
-                  <label>사이즈:</label>
+                <div class="filter-field">
+                  <label>사이즈</label>
                   <select bind:value={filterSize}>
                     {#each sizeOptions as opt}
                       <option value={opt}>{opt === "" ? "전체" : opt}</option>
@@ -700,196 +822,227 @@
                 </div>
               {/if}
               {#if filterVisible.price}
-                <div class="filter-input">
-                  <label>금액:</label>
-                  <input type="text" bind:value={filterPriceMin} placeholder="최소 (원)" />
-                  <input type="text" bind:value={filterPriceMax} placeholder="최대 (원)" />
+                <div class="filter-field filter-range">
+                  <label>금액</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterPriceMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterPriceMax} placeholder="최대" />
+                  </div>
                 </div>
               {/if}
               {#if filterVisible.remaining}
-                <div class="filter-input">
-                  <label>남은 금액:</label>
-                  <input type="text" bind:value={filterRemainingMin} placeholder="최소 (원)" />
-                  <input type="text" bind:value={filterRemainingMax} placeholder="최대 (원)" />
+                <div class="filter-field filter-range">
+                  <label>남은 금액</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterRemainingMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterRemainingMax} placeholder="최대" />
+                  </div>
                 </div>
               {/if}
               {#if filterVisible.expectedCustoms}
-                <div class="filter-input">
-                  <label>예상 관세:</label>
-                  <input type="text" bind:value={filterExpectedCustomsMin} placeholder="최소 (원)" />
-                  <input type="text" bind:value={filterExpectedCustomsMax} placeholder="최대 (원)" />
+                <div class="filter-field filter-range">
+                  <label>예상 관세</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterExpectedCustomsMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterExpectedCustomsMax} placeholder="최대" />
+                  </div>
                 </div>
               {/if}
             </div>
           </div>
-          <div class="column-toggle">
-            <label><input type="checkbox" bind:checked={visibleColumns.src}> 이미지</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.month}> 연월</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.description}> 설명</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.status}> 결제 상태</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.teamStatus}> 구매처</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.type}> 종류</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.size}> 사이즈</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.price}> 금액</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.remaining}> 남은 금액</label>
-            <label><input type="checkbox" bind:checked={visibleColumns.expectedCustoms}> 예상 관세</label>
+        {/if}
+
+        {#if columnPanelOpen}
+          <div class="panel column-panel">
+            <div class="column-chips">
+              {#each Object.entries(columnLabels) as [key, label]}
+                <button class="chip" class:active={visibleColumns[key]} on:click={() => toggleColumn(key)}>
+                  {label}
+                </button>
+              {/each}
+            </div>
           </div>
-        </div>
-        <table class="images-table">
-          <thead>
-          <tr>
-            {#if visibleColumns.src}
-              <th>이미지</th>
-            {/if}
-            {#if visibleColumns.month}
-              <th on:click={() => handleSort('month')}>
-                연월
-                {#if sortCriteria.find(c => c.column === 'month')}
-                  {sortCriteria.find(c => c.column === 'month').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.description}
-              <th on:click={() => handleSort('description')}>
-                설명
-                {#if sortCriteria.find(c => c.column === 'description')}
-                  {sortCriteria.find(c => c.column === 'description').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.status}
-              <th on:click={() => handleSort('status')}>
-                결제 상태
-                {#if sortCriteria.find(c => c.column === 'status')}
-                  {sortCriteria.find(c => c.column === 'status').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.teamStatus}
-              <th on:click={() => handleSort('teamStatus')}>
-                구매처
-                {#if sortCriteria.find(c => c.column === 'teamStatus')}
-                  {sortCriteria.find(c => c.column === 'teamStatus').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.type}
-              <th on:click={() => handleSort('type')}>
-                종류
-                {#if sortCriteria.find(c => c.column === 'type')}
-                  {sortCriteria.find(c => c.column === 'type').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.size}
-              <th on:click={() => handleSort('size')}>
-                사이즈
-                {#if sortCriteria.find(c => c.column === 'size')}
-                  {sortCriteria.find(c => c.column === 'size').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.price}
-              <th on:click={() => handleSort('price')}>
-                금액
-                {#if sortCriteria.find(c => c.column === 'price')}
-                  {sortCriteria.find(c => c.column === 'price').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.remaining}
-              <th on:click={() => handleSort('remaining')}>
-                남은 금액
-                {#if sortCriteria.find(c => c.column === 'remaining')}
-                  {sortCriteria.find(c => c.column === 'remaining').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-            {#if visibleColumns.expectedCustoms}
-              <th on:click={() => handleSort('expectedCustoms')}>
-                예상 관세
-                {#if sortCriteria.find(c => c.column === 'expectedCustoms')}
-                  {sortCriteria.find(c => c.column === 'expectedCustoms').direction === 'asc' ? '▲' : '▼'}
-                {/if}
-              </th>
-            {/if}
-          </tr>
-          </thead>
-          <tbody>
-          {#each sortedFilteredImages as img}
+        {/if}
+
+        <div class="table-wrapper">
+          <table class="images-table">
+            <thead>
             <tr>
               {#if visibleColumns.src}
-                <td><img src={img.src} alt="Image" class="table-thumb" /></td>
+                <th>이미지</th>
               {/if}
               {#if visibleColumns.month}
-                <td>
-                  <select bind:value={img.month} on:blur={(e) => updateImageField(img, 'month', e.target.value)}>
-                    {#each months as m}
-                      <option value={m}>{m}</option>
-                    {/each}
-                  </select>
-                </td>
+                <th class="sortable" on:click={() => handleSort('month')}>
+                  연월
+                  {#if sortCriteria.find(c => c.column === 'month')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'month').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.description}
-                <td>
-                  <input type="text" value={img.description} on:blur={(e) => updateImageField(img, 'description', e.target.value)} />
-                </td>
+                <th class="sortable" on:click={() => handleSort('description')}>
+                  설명
+                  {#if sortCriteria.find(c => c.column === 'description')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'description').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
+              {/if}
+              {#if visibleColumns.purchaseStatus}
+                <th class="sortable" on:click={() => handleSort('purchaseStatus')}>
+                  구매 상태
+                  {#if sortCriteria.find(c => c.column === 'purchaseStatus')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'purchaseStatus').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.status}
-                <td>
-                  <select bind:value={img.status} on:blur={(e) => updateImageField(img, 'status', e.target.value)}>
-                    {#each statusOptions as opt}
-                      <option value={opt}>{opt}</option>
-                    {/each}
-                  </select>
-                </td>
+                <th class="sortable" on:click={() => handleSort('status')}>
+                  결제 상태
+                  {#if sortCriteria.find(c => c.column === 'status')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'status').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.teamStatus}
-                <td>
-                  <select bind:value={img.teamStatus} on:blur={(e) => updateImageField(img, 'teamStatus', e.target.value)}>
-                    {#each teamStatusOptions as opt}
-                      <option value={opt}>{opt}</option>
-                    {/each}
-                  </select>
-                </td>
+                <th class="sortable" on:click={() => handleSort('teamStatus')}>
+                  구매처
+                  {#if sortCriteria.find(c => c.column === 'teamStatus')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'teamStatus').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.type}
-                <td>
-                  <select bind:value={img.type} on:blur={(e) => updateImageField(img, 'type', e.target.value)}>
-                    {#each typeOptions as opt}
-                      <option value={opt}>{opt}</option>
-                    {/each}
-                  </select>
-                </td>
+                <th class="sortable" on:click={() => handleSort('type')}>
+                  종류
+                  {#if sortCriteria.find(c => c.column === 'type')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'type').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.size}
-                <td>
-                  <select bind:value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)}>
-                    {#each sizeOptions as opt}
-                      <option value={opt}>{opt}</option>
-                    {/each}
-                  </select>
-                </td>
+                <th class="sortable" on:click={() => handleSort('size')}>
+                  사이즈
+                  {#if sortCriteria.find(c => c.column === 'size')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'size').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.price}
-                <td>
-                  <input type="number" value={img.price} on:blur={(e) => updateImageField(img, 'price', e.target.value)} />
-                </td>
+                <th class="sortable" on:click={() => handleSort('price')}>
+                  금액
+                  {#if sortCriteria.find(c => c.column === 'price')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'price').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.remaining}
-                <td>
-                  <input type="number" value={img.remaining} on:blur={(e) => updateImageField(img, 'remaining', e.target.value)} />
-                </td>
+                <th class="sortable" on:click={() => handleSort('remaining')}>
+                  남은 금액
+                  {#if sortCriteria.find(c => c.column === 'remaining')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'remaining').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
               {#if visibleColumns.expectedCustoms}
-                <td>
-                  <input type="number" value={img.expectedCustoms} on:blur={(e) => updateImageField(img, 'expectedCustoms', e.target.value)} />
-                </td>
+                <th class="sortable" on:click={() => handleSort('expectedCustoms')}>
+                  예상 관세
+                  {#if sortCriteria.find(c => c.column === 'expectedCustoms')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'expectedCustoms').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
               {/if}
             </tr>
-          {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+            {#each sortedFilteredImages as img, i}
+              <tr class:stripe={i % 2 === 1}>
+                {#if visibleColumns.src}
+                  <td><img src={img.src} alt="Image" class="table-thumb" /></td>
+                {/if}
+                {#if visibleColumns.month}
+                  <td>
+                    <select bind:value={img.month} on:blur={(e) => updateImageField(img, 'month', e.target.value)}>
+                      {#each months as m}
+                        <option value={m}>{m}</option>
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
+                {#if visibleColumns.description}
+                  <td>
+                    <input type="text" value={img.description} on:blur={(e) => updateImageField(img, 'description', e.target.value)} />
+                  </td>
+                {/if}
+                {#if visibleColumns.purchaseStatus}
+                  <td>
+                    <select value={img.purchaseStatus || '구매'} on:blur={(e) => updateImageField(img, 'purchaseStatus', e.target.value)}>
+                      {#each purchaseStatusOptions as opt}
+                        {#if opt !== ""}
+                          <option value={opt}>{opt}</option>
+                        {/if}
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
+                {#if visibleColumns.status}
+                  <td>
+                    <select bind:value={img.status} on:blur={(e) => updateImageField(img, 'status', e.target.value)}>
+                      {#each statusOptions as opt}
+                        <option value={opt}>{opt}</option>
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
+                {#if visibleColumns.teamStatus}
+                  <td>
+                    <select bind:value={img.teamStatus} on:blur={(e) => updateImageField(img, 'teamStatus', e.target.value)}>
+                      {#each teamStatusOptions as opt}
+                        <option value={opt}>{opt}</option>
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
+                {#if visibleColumns.type}
+                  <td>
+                    <select bind:value={img.type} on:blur={(e) => updateImageField(img, 'type', e.target.value)}>
+                      {#each typeOptions as opt}
+                        <option value={opt}>{opt}</option>
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
+                {#if visibleColumns.size}
+                  <td>
+                    <select bind:value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)}>
+                      {#each sizeOptions as opt}
+                        <option value={opt}>{opt}</option>
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
+                {#if visibleColumns.price}
+                  <td>
+                    <input type="number" value={img.price} on:blur={(e) => updateImageField(img, 'price', e.target.value)} />
+                  </td>
+                {/if}
+                {#if visibleColumns.remaining}
+                  <td>
+                    <input type="number" value={img.remaining} on:blur={(e) => updateImageField(img, 'remaining', e.target.value)} />
+                  </td>
+                {/if}
+                {#if visibleColumns.expectedCustoms}
+                  <td>
+                    <input type="number" value={img.expectedCustoms} on:blur={(e) => updateImageField(img, 'expectedCustoms', e.target.value)} />
+                  </td>
+                {/if}
+              </tr>
+            {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </div>
@@ -920,61 +1073,149 @@
     }} />
 {/if}
 
+{#if urlImportOpen}
+  <UrlImport
+          userUid={user.uid}
+          on:imported={handleUrlImported}
+          on:close={() => urlImportOpen = false} />
+{/if}
+
 <style>
+  /* ===== Header ===== */
   .dashboard-header {
     position: fixed;
-    top: 1rem;
-    left: 1rem;
-    right: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    top: 0;
+    left: 0;
+    right: 0;
     z-index: 50;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-border);
     transition: transform 0.3s ease-in-out;
+  }
+  :global(html.dark) .dashboard-header {
+    background: rgba(10, 10, 10, 0.9);
   }
   .dashboard-header.hide {
     transform: translateY(-100%);
   }
+  .header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  /* ===== View Switch (Segment Control) ===== */
+  .view-switch {
+    display: flex;
+    background: var(--color-surface-hover);
+    border-radius: var(--radius);
+    padding: 3px;
+    gap: 2px;
+  }
   .view-switch button {
-    background: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
     border: none;
-    font-size: 1.8rem;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-    margin-right: 0.5rem;
-    opacity: 0.5;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
   }
-  .view-switch button.selected {
-    transform: scale(1.2);
-    opacity: 1;
+  .view-switch button.active {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
   }
-  .mobile-header .hamburger {
-    background: none;
+  .view-switch button:hover:not(.active) {
+    color: var(--color-text-secondary);
+  }
+  .view-label {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .view-label {
+      display: inline;
+    }
+  }
+
+  /* ===== Header Actions ===== */
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .url-import-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+  }
+  .url-import-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-primary-bg);
+  }
+  .url-label {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .url-label {
+      display: inline;
+    }
+  }
+
+  /* ===== Hamburger ===== */
+  .hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     border: none;
-    font-size: 2rem;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--color-text-secondary);
     cursor: pointer;
-    color: inherit;
+    transition: all var(--transition-fast);
   }
-  :global(html.dark) .hamburger {
-    color: #fff;
+  .hamburger:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
   }
+
+  /* ===== Sidebar ===== */
   .sidebar {
     position: fixed;
     top: 0;
     right: 0;
-    width: 250px;
+    width: 320px;
     height: 100%;
-    background-color: #fff;
-    padding: 1rem;
-    box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+    background-color: var(--color-surface);
+    border-left: 1px solid var(--color-border);
     z-index: 100;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-  }
-  :global(html.dark) .sidebar {
-    background-color: #333;
-    color: #fff;
+    overflow-y: auto;
   }
   .sidebar-backdrop {
     position: fixed;
@@ -982,259 +1223,304 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.5);
+    background: var(--color-overlay);
     z-index: 90;
   }
-  .close-btn {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    align-self: flex-end;
-    cursor: pointer;
-    color: inherit;
-  }
-  .totals {
+  .sidebar-header {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    font-weight: bold;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--color-border);
   }
-  .totals span {
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    background-color: #3498db;
-    color: #fff;
+  .sidebar-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text);
   }
-  :global(html.dark) .totals span {
-    background-color: #555;
-  }
-  .logout-button {
-    padding: 0.5rem 1rem;
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  :global(html.dark) .logout-button {
-    background-color: #555;
-    color: #fff;
-  }
-  .save-image-button {
-    padding: 0.5rem 1rem;
-    background-color: #27ae60;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+  .close-btn {
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
   }
-  .save-image-button:disabled {
-    opacity: 0.7;
+  .close-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+  .sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--color-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .user-info {
+    overflow: hidden;
+  }
+  .user-email {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+  .sidebar-section {
+    padding: var(--space-4) var(--space-5);
+  }
+  .sidebar-section h4 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+  }
+  .totals-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+  .total-card {
+    background: var(--color-surface-hover);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .total-card-accent {
+    grid-column: 1 / -1;
+    background: var(--color-primary-bg);
+  }
+  .total-label {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .total-value {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .total-card-accent .total-value {
+    color: var(--color-primary);
+  }
+  .sidebar-actions {
+    padding: var(--space-4) var(--space-5);
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    border-top: 1px solid var(--color-border);
+  }
+  .sidebar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .btn-save {
+    background: var(--color-primary);
+    color: white;
+  }
+  .btn-save:hover {
+    background: var(--color-primary-hover);
+  }
+  .btn-save:disabled {
+    opacity: 0.6;
     cursor: not-allowed;
   }
+  .btn-logout {
+    background: transparent;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+  }
+  .btn-logout:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
   .spinner-button {
-    border: 2px solid #fff;
-    border-top: 2px solid transparent;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top: 2px solid white;
     border-radius: 50%;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     animation: spin 1s linear infinite;
     display: inline-block;
-    margin-right: 0.5rem;
   }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
+
+  /* ===== Loading ===== */
   .dashboard-loading {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255,255,255,0.8);
+    background: var(--color-overlay);
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
     z-index: 1001;
   }
+  .loading-content {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    box-shadow: var(--shadow-lg);
+    min-width: 240px;
+  }
   .spinner {
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3498db;
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--color-border);
+    border-top: 3px solid var(--color-primary);
     border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    animation: spin 1s linear infinite;
+    animation: spin 0.8s linear infinite;
   }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .loading-text {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    text-align: center;
+  }
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+  }
+
+  /* ===== Dashboard ===== */
   .dashboard {
-    min-height: 100%;
+    min-height: 100vh;
     margin: 0 auto;
-    padding: 6rem 1rem 1rem 1rem;
-    background-color: #fff;
-    color: #333;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    padding: 56px var(--space-4) var(--space-4) var(--space-4);
+    background-color: var(--color-bg);
+    color: var(--color-text);
   }
-  :global(html.dark) .dashboard {
-    background-color: #1e1e1e;
-    color: #fff;
-  }
+
+  /* ===== Year Control ===== */
   .year-control {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
   }
-  .year-control select,
-  .year-control button {
-    padding: 0.5rem;
-    color: inherit;
-    background-color: transparent;
-    border: 1px solid currentColor;
-  }
-  .capture-area {
-    position: relative;
-    background-color: #fff;
-    padding: 3rem 1rem 1rem 1rem;
-    color: #333;
-  }
-  :global(html.dark) .capture-area {
-    background-color: #1e1e1e;
-    color: #fff;
-  }
-  .table-view-container {
-    position: relative;
-    overflow-x: auto;
-  }
-  :global(html.dark) .table-view-container {
-    background-color: #1e1e1e;
-    color: #fff;
-  }
-  .table-controls {
+  .year-btn {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-  }
-  .filter-section {
-    flex: 1;
-  }
-  .filter-icons {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  .filter-icons button {
-    background: none;
-    border: none;
-    font-size: 1.4rem;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
     cursor: pointer;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    transition: all var(--transition-fast);
   }
-  .filter-icons button.active,
-  .filter-icons button:hover {
-    opacity: 1;
+  .year-btn:hover:not(:disabled) {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
   }
-  .filter-inputs {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .filter-input {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-  .filter-input label {
-    font-size: 0.9rem;
-    width: 80px;
-  }
-  .filter-input input,
-  .filter-input select {
-    width: 100%;
-    padding: 0.3rem;
-    font-size: 0.9rem;
-    border: 1px solid #ccc;
-  }
-  :global(html.dark) .filter-input input,
-  :global(html.dark) .filter-input select {
-    background-color: #444;
-    border-color: #666;
-    color: #fff;
-  }
-  .column-toggle {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: center;
-    font-size: 0.9rem;
-  }
-  @media (max-width: 680px) {
-    .column-toggle {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.25rem;
-      font-size: 0.8rem;
-    }
-    .column-toggle label {
-      width: 100%;
-      min-width: 80px;
-      padding: 0.5rem;
-      border-bottom: 1px solid #ccc;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-  }
-  .images-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-  }
-  .images-table th,
-  .images-table td {
-    border: 1px solid #ddd;
-    padding: 0.5rem;
+  .year-select {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    min-width: 100px;
     text-align: center;
   }
-  .images-table th {
-    background-color: #3498db;
-    color: #fff;
-    cursor: pointer;
+
+  /* ===== Capture Area ===== */
+  .capture-area {
+    position: relative;
+    background-color: var(--color-bg);
+    padding: var(--space-3) 0;
+    color: var(--color-text);
   }
-  :global(html.dark) .images-table th {
-    background-color: #444;
-    border-color: #555;
-  }
-  .table-thumb {
-    width: 50px;
-    height: auto;
-  }
+
+  /* ===== Grid View ===== */
   .months-grid {
     display: grid;
-    gap: 1rem;
+    gap: var(--space-4);
     grid-template-columns: repeat(6, 1fr);
   }
   @media (max-width: 1280px) {
     .months-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+  @media (max-width: 1024px) {
+    .months-grid {
       grid-template-columns: repeat(3, 1fr);
     }
   }
-  @media (max-width: 680px) {
+  @media (max-width: 768px) {
     .months-grid {
       grid-template-columns: repeat(2, 1fr);
     }
   }
-  @media (max-width: 480px) {
+  @media (max-width: 640px) {
     .months-grid {
       grid-template-columns: 1fr;
     }
+    .sidebar {
+      width: 100%;
+    }
   }
+
+  /* ===== Single View ===== */
   .single-view {
     text-align: center;
   }
@@ -1242,11 +1528,220 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+  }
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .nav-btn:hover:not(:disabled) {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+  .nav-month {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-text);
+    min-width: 100px;
   }
   .month-single {
     display: flex;
     justify-content: center;
+  }
+
+  /* ===== Table View ===== */
+  .table-view-container {
+    position: relative;
+  }
+  .table-toolbar {
+    display: flex;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .toolbar-btn:hover {
+    border-color: var(--color-border-hover);
+    color: var(--color-text);
+  }
+  .toolbar-btn.active {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  /* ===== Filter/Column Panel ===== */
+  .panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+  .filter-chips,
+  .column-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .column-chips {
+    margin-bottom: 0;
+  }
+  .chip {
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .chip:hover {
+    border-color: var(--color-border-hover);
+  }
+  .chip.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+  }
+  .filter-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-3);
+  }
+  .filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .filter-field label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+  }
+  .filter-field input,
+  .filter-field select {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.8125rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .range-inputs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .range-inputs input {
+    flex: 1;
+    min-width: 0;
+  }
+  .range-sep {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  /* ===== Table ===== */
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+  .images-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+  .images-table th,
+  .images-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .images-table th {
+    background-color: var(--color-surface-hover);
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+  }
+  .images-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+  .images-table th.sortable:hover {
+    color: var(--color-primary);
+  }
+  .sort-icon {
+    font-size: 0.625rem;
+    margin-left: 2px;
+    color: var(--color-primary);
+  }
+  .images-table tbody tr {
+    transition: background-color var(--transition-fast);
+  }
+  .images-table tbody tr:hover {
+    background-color: var(--color-surface-hover);
+  }
+  .images-table tbody tr.stripe {
+    background-color: var(--color-surface);
+  }
+  .images-table tbody tr.stripe:hover {
+    background-color: var(--color-surface-hover);
+  }
+  .images-table td select,
+  .images-table td input {
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.8125rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text);
+    transition: border-color var(--transition-fast);
+    width: 100%;
+    min-width: 60px;
+  }
+  .images-table td select:focus,
+  .images-table td input:focus {
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+  }
+  .table-thumb {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
   }
 </style>

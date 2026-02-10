@@ -1,0 +1,17 @@
+{
+  "name": "figure-calendar-functions",
+  "description": "Cloud Functions for figure-calendar scraping",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.9.0",
+    "node-fetch": "^2.7.0"
+  },
+  "overrides": {
+    "undici": "5.28.4"
+  }
+}

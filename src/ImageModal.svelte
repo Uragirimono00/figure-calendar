@@ -2,17 +2,17 @@
 <script>
     import { onMount, createEventDispatcher } from 'svelte';
     export let image;
-    // image 객체: { id, src, date, description, month, storagePath, status, teamStatus, type, size, price, remaining, expectedCustoms, purchaseDate, purchasePlace }
     const dispatch = createEventDispatcher();
 
     let description = image.description || "";
     let status = image.status || "예약금";
     let teamStatus = image.teamStatus || "코아";
+    let purchaseStatus = image.purchaseStatus || "";
+    let manufacturer = image.manufacturer || "";
+    let releaseDate = image.releaseDate || "";
 
-    // 새 필드들 (기본값 설정)
     let type = image.type || "PVC";
     let size = image.size || "1/1";
-    // 숫자 관련 필드는 raw 값(콤마 없이)로 저장하고, 포맷된 값은 반응적으로 계산
     let priceRaw = image.price ? String(image.price) : "";
     let remainingRaw = image.remaining ? String(image.remaining) : "";
     let expectedCustomsRaw = image.expectedCustoms ? String(image.expectedCustoms) : "";
@@ -23,6 +23,8 @@
     let purchaseDate = image.purchaseDate || "";
     let purchasePlace = image.purchasePlace || "ASL";
 
+    $: showPaymentStatus = purchaseStatus !== "찜";
+
     let backdrop;
     let imageLoaded = false;
 
@@ -30,13 +32,11 @@
         imageLoaded = true;
     }
 
-    // 숫자에 천단위 구분 콤마를 추가하는 헬퍼 함수
     function formatNumber(n) {
         if (!n) return "";
         return Number(n).toLocaleString();
     }
 
-    // 입력값에서 콤마 및 숫자가 아닌 문자 제거 후 raw 값을 업데이트하고, 자동 저장 호출
     function handlePriceInput(event) {
         let val = event.target.value.replace(/,/g, '').replace(/\D/g, '');
         priceRaw = val;
@@ -53,15 +53,17 @@
         save();
     }
 
-    // 필드 변경 시 자동 저장 (저장 버튼은 제거)
     function save() {
         dispatch('save', {
             description,
             status,
             teamStatus,
+            purchaseStatus,
+            manufacturer,
+            releaseDate,
             type,
             size,
-            price: priceRaw,             // 저장 시 raw 값만 전달
+            price: priceRaw,
             remaining: remainingRaw,
             expectedCustoms: expectedCustomsRaw,
             purchaseDate,
@@ -88,101 +90,147 @@
      on:click={closeModal}
      on:keydown={(e) => { if(e.key === 'Escape') closeModal(); }}>
     <div class="modal-content" on:click|stopPropagation>
-        <div class="img-container">
-            {#if !imageLoaded}
-                <div class="img-placeholder">
-                    <div class="spinner"></div>
+        <div class="modal-header">
+            <h3>상세 정보</h3>
+            <button class="modal-close-btn" on:click={closeModal}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <div class="img-container">
+                {#if !imageLoaded}
+                    <div class="img-placeholder">
+                        <div class="spinner"></div>
+                    </div>
+                {/if}
+                <img src={image.src} alt="Uploaded image" loading="eager" on:load={handleImageLoad} style="display: {imageLoaded ? 'block' : 'none'}" />
+            </div>
+
+            <div class="form-section">
+                <div class="field full-width">
+                    <label for="modal-desc">설명</label>
+                    <textarea id="modal-desc" bind:value={description} placeholder="이미지 설명 추가" on:input={save}></textarea>
                 </div>
-            {/if}
-            <img src={image.src} alt="Uploaded image" loading="eager" on:load={handleImageLoad} style="display: {imageLoaded ? 'block' : 'none'}" />
-        </div>
-        <textarea bind:value={description} placeholder="이미지 설명 추가" on:input={save}></textarea>
 
-        <div class="status-select">
-            <label>결제 상태:</label>
-            <select bind:value={status} on:change={save}>
-                <option value="예약금">예약금</option>
-                <option value="전액">전액</option>
-                <option value="꼴림">꼴림</option>
-            </select>
+                <div class="fields-grid">
+                    <div class="field">
+                        <label for="modal-purchase-status">구매 상태</label>
+                        <select id="modal-purchase-status" bind:value={purchaseStatus} on:change={save}>
+                            <option value="">구매</option>
+                            <option value="구매">구매</option>
+                            <option value="찜">찜 (위시리스트)</option>
+                        </select>
+                    </div>
+
+                    {#if showPaymentStatus}
+                    <div class="field">
+                        <label for="modal-status">결제 상태</label>
+                        <select id="modal-status" bind:value={status} on:change={save}>
+                            <option value="예약금">예약금</option>
+                            <option value="전액">전액</option>
+                            <option value="꼴림">꼴림</option>
+                        </select>
+                    </div>
+                    {/if}
+
+                    <div class="field">
+                        <label for="modal-team">구매처</label>
+                        <select id="modal-team" bind:value={teamStatus} on:change={save}>
+                            <option value="코아">코아</option>
+                            <option value="매하">매하</option>
+                            <option value="히탐">히탐</option>
+                            <option value="래빗츠">래빗츠</option>
+                            <option value="유메">유메</option>
+                            <option value="위북">위북</option>
+                            <option value="드리머">드리머</option>
+                            <option value="ASL">ASL</option>
+                            <option value="중고">중고</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-manufacturer">제조사</label>
+                        <input id="modal-manufacturer" type="text" bind:value={manufacturer} on:input={save} placeholder="제조사명" />
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-release-date">발매일</label>
+                        <input id="modal-release-date" type="text" bind:value={releaseDate} on:input={save} placeholder="예: 2026년 10월" />
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-type">종류</label>
+                        <select id="modal-type" bind:value={type} on:change={save}>
+                            <option value="PVC">PVC</option>
+                            <option value="레진">레진</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-size">사이즈</label>
+                        <select id="modal-size" bind:value={size} on:change={save}>
+                            <option value="1/1">1/1</option>
+                            <option value="1/1.5">1/1.5</option>
+                            <option value="1/2">1/2</option>
+                            <option value="1/2.5">1/2.5</option>
+                            <option value="1/3">1/3</option>
+                            <option value="1/3.5">1/3.5</option>
+                            <option value="1/4">1/4</option>
+                            <option value="1/4.5">1/4.5</option>
+                            <option value="1/5">1/5</option>
+                            <option value="1/5.5">1/5.5</option>
+                            <option value="1/6">1/6</option>
+                            <option value="1/6.5">1/6.5</option>
+                            <option value="1/7">1/7</option>
+                            <option value="1/7.5">1/7.5</option>
+                            <option value="1/8">1/8</option>
+                            <option value="1/8.5">1/8.5</option>
+                            <option value="1/9">1/9</option>
+                            <option value="1/9.5">1/9.5</option>
+                            <option value="1/10">1/10</option>
+                            <option value="1/10.5">1/10.5</option>
+                            <option value="1/11">1/11</option>
+                            <option value="1/11.5">1/11.5</option>
+                            <option value="1/12">1/12</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-price">금액</label>
+                        <input id="modal-price" type="text" value={priceFormatted} on:input={handlePriceInput} placeholder="0" />
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-remaining">남은 금액</label>
+                        <input id="modal-remaining" type="text" value={remainingFormatted} on:input={handleRemainingInput} placeholder="0" />
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-customs">예상 관세</label>
+                        <input id="modal-customs" type="text" value={expectedCustomsFormatted} on:input={handleExpectedCustomsInput} placeholder="0" />
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-date">구매일자</label>
+                        <input id="modal-date" type="date" bind:value={purchaseDate} on:change={save} />
+                    </div>
+                </div>
+
+                {#if image.sourceUrl}
+                    <div class="field full-width source-url-field">
+                        <label>원본 URL</label>
+                        <a href={image.sourceUrl} target="_blank" rel="noopener noreferrer" class="source-url-link">{image.sourceUrl}</a>
+                    </div>
+                {/if}
+            </div>
         </div>
 
-        <div class="status-select">
-            <label>팀 상태:</label>
-            <select bind:value={teamStatus} on:change={save}>
-                <option value="코아">코아</option>
-                <option value="매하">매하</option>
-                <option value="히탐">히탐</option>
-                <option value="래빗츠">래빗츠</option>
-                <option value="유메">유메</option>
-                <option value="위북">위북</option>
-                <option value="드리머">드리머</option>
-                <option value="ASL">ASL</option>
-                <option value="중고">중고</option>
-            </select>
-        </div>
-
-        <!-- 새 항목들 -->
-        <div class="status-select">
-            <label>종류:</label>
-            <select bind:value={type} on:change={save}>
-                <option value="PVC">PVC</option>
-                <option value="레진">레진</option>
-            </select>
-        </div>
-
-        <div class="status-select">
-            <label>사이즈:</label>
-            <select bind:value={size} on:change={save}>
-                <option value="1/1">1/1</option>
-                <option value="1/1.5">1/1.5</option>
-                <option value="1/2">1/2</option>
-                <option value="1/2.5">1/2.5</option>
-                <option value="1/3">1/3</option>
-                <option value="1/3.5">1/3.5</option>
-                <option value="1/4">1/4</option>
-                <option value="1/4.5">1/4.5</option>
-                <option value="1/5">1/5</option>
-                <option value="1/5.5">1/5.5</option>
-                <option value="1/6">1/6</option>
-                <option value="1/6.5">1/6.5</option>
-                <option value="1/7">1/7</option>
-                <option value="1/7.5">1/7.5</option>
-                <option value="1/8">1/8</option>
-                <option value="1/8.5">1/8.5</option>
-                <option value="1/9">1/9</option>
-                <option value="1/9.5">1/9.5</option>
-                <option value="1/10">1/10</option>
-                <option value="1/10.5">1/10.5</option>
-                <option value="1/11">1/11</option>
-                <option value="1/11.5">1/11.5</option>
-                <option value="1/12">1/12</option>
-            </select>
-        </div>
-
-        <div class="status-select">
-            <label>금액:</label>
-            <input type="text" value={priceFormatted} on:input={handlePriceInput} placeholder="금액 입력 (원)" />
-        </div>
-
-        <div class="status-select">
-            <label>남은 금액:</label>
-            <input type="text" value={remainingFormatted} on:input={handleRemainingInput} placeholder="남은 금액 입력 (원)" />
-        </div>
-
-        <div class="status-select">
-            <label>예상 관세:</label>
-            <input type="text" value={expectedCustomsFormatted} on:input={handleExpectedCustomsInput} placeholder="예상 관세 입력 (원)" />
-        </div>
-
-        <div class="status-select">
-            <label>구매일자:</label>
-            <input type="date" bind:value={purchaseDate} on:change={save} />
-        </div>
-
-        <div class="modal-buttons">
-            <!-- 자동 저장으로 저장 버튼 제거 -->
-            <button class="btn-delete" on:click={deleteImage}>삭제</button>
+        <div class="modal-footer">
+            <button class="btn-delete" on:click={deleteImage}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                삭제
+            </button>
             <button class="btn-close" on:click={closeModal}>닫기</button>
         </div>
     </div>
@@ -195,47 +243,79 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0,0,0,0.6);
+        background: var(--color-overlay);
         backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
         display: flex;
         justify-content: center;
         align-items: center;
         z-index: 1000;
-    }
-    :global(html.dark) .modal-backdrop {
-        background: rgba(0,0,0,0.8);
+        padding: var(--space-4);
     }
     .modal-content {
-        background: #fff;
-        border-radius: 12px;
-        padding: 2rem;
-        width: 90%;
-        max-width: 600px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        animation: fadeIn 0.3s ease-out;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-xl);
+        width: 100%;
+        max-width: 700px;
+        max-height: 90vh;
+        box-shadow: var(--shadow-lg);
+        animation: modalIn 0.2s ease-out;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    @keyframes modalIn {
+        from { opacity: 0; transform: scale(0.96) translateY(8px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space-4) var(--space-5);
+        border-bottom: 1px solid var(--color-border);
+        flex-shrink: 0;
+    }
+    .modal-header h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-text);
+    }
+    .modal-close-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--color-text-secondary);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    .modal-close-btn:hover {
+        background: var(--color-surface-hover);
+        color: var(--color-text);
+    }
+    .modal-body {
         overflow-y: auto;
-        max-height: 90%;
-        text-align: center;
-    }
-    :global(html.dark) .modal-content {
-        background: #2c2c2c;
-        color: #f1f1f1;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.6);
-    }
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
+        padding: var(--space-5);
+        flex: 1;
     }
     .img-container {
-        margin-bottom: 1rem;
-        position: relative;
+        margin-bottom: var(--space-5);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        background: var(--color-surface-hover);
     }
     .img-container img {
         display: block;
-        margin: 0 auto;
-        max-width: 100%;
+        width: 100%;
         height: auto;
-        border-radius: 8px;
+        max-height: 400px;
+        object-fit: contain;
     }
     .img-placeholder {
         width: 100%;
@@ -243,103 +323,127 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #e0e0e0;
-        border-radius: 8px;
     }
     .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #3498db;
+        border: 3px solid var(--color-border);
+        border-top: 3px solid var(--color-primary);
         border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
+        width: 32px;
+        height: 32px;
+        animation: spin 0.8s linear infinite;
     }
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
-    textarea {
+    .form-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+    .full-width {
         width: 100%;
-        padding: 0.5rem;
-        font-size: 1rem;
-        border: 1px solid #ddd;
-        border-radius: 6px;
+    }
+    .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+    .field label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-text-muted);
+    }
+    .field input,
+    .field select,
+    .field textarea {
+        padding: var(--space-2) var(--space-3);
+        font-size: 0.875rem;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        background: var(--color-surface);
+        color: var(--color-text);
+        transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    textarea {
         resize: vertical;
-        min-height: 80px;
-        margin-bottom: 1rem;
-        background: #f9f9f9;
-        color: #333;
+        min-height: 72px;
+        line-height: 1.5;
     }
-    :global(html.dark) textarea {
-        background: #444;
-        border: 1px solid #555;
-        color: #eee;
+    .fields-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-3);
     }
-    .status-select {
+    .modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space-3) var(--space-5);
+        border-top: 1px solid var(--color-border);
+        flex-shrink: 0;
+    }
+    .modal-footer button {
         display: flex;
         align-items: center;
-        justify-content: center;
-        margin-bottom: 1rem;
-    }
-    .status-select label {
-        margin-right: 0.5rem;
-        font-weight: bold;
-        min-width: 80px;
-    }
-    .status-select select,
-    .status-select input {
-        flex: 1;
-        padding: 0.4rem;
-        font-size: 1rem;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        background: #f9f9f9;
-        color: #333;
-    }
-    :global(html.dark) .status-select select,
-    :global(html.dark) .status-select input {
-        background: #444;
-        border: 1px solid #555;
-        color: #eee;
-    }
-    .modal-buttons {
-        display: flex;
-        justify-content: center;
-        gap: 0.5rem;
-        margin-top: 1rem;
-    }
-    .modal-buttons button {
-        padding: 0.6rem 1.2rem;
-        font-size: 1rem;
+        gap: var(--space-1);
+        padding: var(--space-2) var(--space-4);
+        font-size: 0.8125rem;
+        font-weight: 500;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--radius);
         cursor: pointer;
-        transition: background-color 0.2s ease;
+        transition: all var(--transition-fast);
     }
     .btn-delete {
-        background-color: #e74c3c;
-        color: #fff;
+        background: transparent;
+        color: var(--color-danger);
+        border: 1px solid transparent;
     }
     .btn-delete:hover {
-        background-color: #c0392b;
+        background: rgba(239, 68, 68, 0.08);
+        border-color: var(--color-danger);
     }
     .btn-close {
-        background-color: #95a5a6;
-        color: #fff;
+        background: var(--color-surface-hover);
+        color: var(--color-text-secondary);
     }
     .btn-close:hover {
-        background-color: #7f8c8d;
+        background: var(--color-border);
+        color: var(--color-text);
     }
-    :global(html.dark) .btn-delete {
-        background-color: #c0392b;
+
+    .source-url-field {
+        margin-top: var(--space-2);
     }
-    :global(html.dark) .btn-delete:hover {
-        background-color: #992d22;
+    .source-url-link {
+        font-size: 0.8125rem;
+        color: var(--color-primary);
+        word-break: break-all;
+        line-height: 1.4;
     }
-    :global(html.dark) .btn-close {
-        background-color: #7f8c8d;
+    .source-url-link:hover {
+        text-decoration: underline;
     }
-    :global(html.dark) .btn-close:hover {
-        background-color: #616a6b;
+
+    @media (max-width: 640px) {
+        .modal-backdrop {
+            padding: 0;
+            align-items: flex-end;
+        }
+        .modal-content {
+            max-width: 100%;
+            max-height: 95vh;
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        }
+        .fields-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>

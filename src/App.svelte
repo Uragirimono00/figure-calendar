@@ -75,70 +75,89 @@
 {/if}
 
 <footer>
-    {#if currentPage !== "dashboard"}
-        <a href="#/">대시보드</a>
-    {/if}
-    {#if currentPage !== "patch-notes"}
-        <a href="#/patch-notes">패치노트 보기</a>
-    {/if}
+    <div class="footer-inner">
+        {#if currentPage !== "dashboard"}
+            <a href="#/">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                대시보드
+            </a>
+        {/if}
+        {#if currentPage !== "patch-notes"}
+            <a href="#/patch-notes">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                패치노트
+            </a>
+        {/if}
+    </div>
 </footer>
 
-<button class="toggle-dark-mode" on:click="{toggleDarkMode}">
+<button class="toggle-dark-mode" on:click="{toggleDarkMode}" title="{darkMode ? '라이트 모드' : '다크 모드'}">
     {#if darkMode}
-        🌞
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
     {:else}
-        🌜
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     {/if}
 </button>
 
 <style>
-    /* html과 body에 높이 100% 및 기본 마진 제거 */
     :global(html, body) {
         height: 100%;
         margin: 0;
     }
-    /* 앱의 기본 컨테이너가 최소 100vh를 차지하도록 */
-    main {
-        min-height: 100vh;
-    }
     footer {
-        text-align: center;
-        padding: 1rem;
-        background: #f4f4f4;
-        font-size: 0.9rem;
+        border-top: 1px solid var(--color-border);
+        background: var(--color-surface);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
     }
-    :global(html.dark) footer {
-        background: #333;
-        color: #fff;
+    .footer-inner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: var(--space-6);
+        padding: var(--space-3) var(--space-4);
+        max-width: 1280px;
+        margin: 0 auto;
     }
     footer a {
-        margin: 0 0.5rem;
-        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--color-text-secondary);
+        font-size: 0.8125rem;
+        font-weight: 500;
         text-decoration: none;
-        font-weight: bold;
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+        transition: color var(--transition-fast), background-color var(--transition-fast);
     }
     footer a:hover {
-        text-decoration: underline;
+        color: var(--color-primary);
+        background-color: var(--color-primary-bg);
+        text-decoration: none;
     }
     .toggle-dark-mode {
         position: fixed;
-        bottom: 1rem;
-        right: 1rem;
-        background-color: #3498db;
-        border: none;
-        border-radius: 50%;
-        width: 3rem;
-        height: 3rem;
+        bottom: var(--space-4);
+        right: var(--space-4);
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-full);
+        width: 40px;
+        height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font-size: 1.5rem;
-        color: #fff;
+        color: var(--color-text-secondary);
         z-index: 100;
-        transition: background-color 0.3s ease;
+        box-shadow: var(--shadow-md);
+        transition: all var(--transition-fast);
     }
     .toggle-dark-mode:hover {
-        background-color: #2980b9;
+        background-color: var(--color-surface-hover);
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+        transform: scale(1.05);
     }
 </style>
