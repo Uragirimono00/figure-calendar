@@ -6,6 +6,7 @@
     import Signup from "./Signup.svelte";
     import Dashboard from "./Dashboard.svelte";
     import PatchNotes from "./PatchNotes.svelte";
+    import PrivacyPolicy from "./PrivacyPolicy.svelte";
 
     let user = null;
     let showSignup = false;
@@ -17,6 +18,8 @@
         const hash = window.location.hash;
         if (hash === "#/patch-notes") {
             currentPage = "patch-notes";
+        } else if (hash === "#/privacy") {
+            currentPage = "privacy";
         } else {
             currentPage = "dashboard";
         }
@@ -60,7 +63,9 @@
     }
 </script>
 
-{#if !user}
+{#if currentPage === "privacy"}
+    <PrivacyPolicy />
+{:else if !user}
     {#if showSignup}
         <Signup on:authSuccess="{(e) => (user = e.detail.user)}" on:showLogin="{toggleAuthMode}" />
     {:else}
@@ -86,6 +91,12 @@
             <a href="#/patch-notes">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 패치노트
+            </a>
+        {/if}
+        {#if currentPage !== "privacy"}
+            <a href="#/privacy">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                개인정보처리방침
             </a>
         {/if}
     </div>
