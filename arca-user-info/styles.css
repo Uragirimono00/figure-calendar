@@ -1,0 +1,37 @@
+.arca-user-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #aaa;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-weight: normal;
+}
+
+.arca-user-badge a {
+  text-decoration: none;
+}
+
+.arca-user-badge a:hover {
+  text-decoration: underline;
+}
+
+.arca-badge-red {
+  color: #ff6b6b;
+}
+
+.arca-badge-yellow {
+  color: #ffd43b;
+}
+
+.arca-badge-default {
+  color: #adb5bd;
+}
+
+.arca-badge-green {
+  color: #51cf66;
+}
