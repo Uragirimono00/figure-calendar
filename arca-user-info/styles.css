@@ -35,3 +35,41 @@
 .arca-badge-green {
   color: #51cf66;
 }
+
+.arca-warn-row {
+  background: rgba(255, 107, 107, 0.12) !important;
+  border-left: 3px solid #ff6b6b !important;
+}
+
+.arca-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  background: rgba(30, 30, 50, 0.95);
+  color: #ff6b6b;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #ff6b6b33;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 999999;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+}
+
+.arca-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#arca-captcha-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 999999;
+}

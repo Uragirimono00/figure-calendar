@@ -382,6 +382,16 @@ saveBtn.addEventListener("click", async () => {
 
     showStatus("저장되었습니다!", "success");
     previewEl.style.display = "none";
+
+    // 열려있는 피규어 캘린더 탭 자동 새로고침
+    try {
+      const tabs = await chrome.tabs.query({ url: "https://figure-calendar.vercel.app/*" });
+      for (const tab of tabs) {
+        chrome.tabs.reload(tab.id);
+      }
+    } catch (e) {
+      // ignore
+    }
   } catch (err) {
     showStatus("저장 실패: " + err.message, "error");
   }

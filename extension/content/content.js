@@ -1,6 +1,6 @@
 // content/content.js - 상품 페이지에서 데이터 추출
 
-const STORE_NAMES = ["코믹스아트", "comicsart", "매니아하우스", "maniahouse"];
+const STORE_NAMES = ["코믹스아트", "comicsart", "매니아하우스", "maniahouse", "히어로타임", "herotime", "래빗츠", "rabbits"];
 function isStoreName(value) {
   const norm = value.toLowerCase().replace(/[\s\-_()（）]+/g, "");
   return STORE_NAMES.some((s) => norm.includes(s));
@@ -69,7 +69,7 @@ async function extractProductData() {
               result.price = price;
             } else if (name.includes("잔금")) {
               result.remaining = price;
-            } else if (name.includes("예약금") || name.includes("1차결제") || name.includes("계약금")) {
+            } else if (name.includes("예약금") || name.includes("예약결제") || name.includes("1차결제") || name.includes("계약금")) {
               result.deposit = price;
             }
           }
@@ -176,6 +176,10 @@ async function extractProductData() {
     result.purchasePlace = "코아";
   } else if (hostname.includes("maniahouse")) {
     result.purchasePlace = "매하";
+  } else if (hostname.includes("herotime")) {
+    result.purchasePlace = "히어로타임";
+  } else if (hostname.includes("rabbits")) {
+    result.purchasePlace = "래빗츠";
   }
 
   // Fallback: OG meta tags
@@ -192,28 +196,40 @@ async function extractProductData() {
     result.price = ogPrice ? ogPrice.content : "";
   }
 
-  // --- HTML 테이블에서 상품 스펙 추출 (Cafe24 th/td 구조) ---
-  const isCafe24 = hostname.includes("comics-art") || hostname.includes("maniahouse");
+  // --- HTML 테이블/구조에서 상품 스펙 추출 (Cafe24 th/td, dl/dt/dd) ---
+  const isCafe24 = hostname.includes("comics-art") || hostname.includes("maniahouse") || hostname.includes("herotime") || hostname.includes("rabbits");
   if (isCafe24) {
+    const specMap = {};
     document.querySelectorAll("table tr").forEach((tr) => {
       const th = tr.querySelector("th");
       const td = tr.querySelector("td");
       if (!th || !td) return;
-      const key = th.innerText.trim().replace(/\s+/g, "").toLowerCase();
-      const value = td.innerText.trim();
-      if (!result.manufacturer && (key.includes("제조사") || key.includes("메이커") || key.includes("브랜드"))) {
+      specMap[th.innerText.trim().replace(/\s+/g, "")] = td.innerText.trim();
+    });
+    document.querySelectorAll("dl").forEach((dl) => {
+      dl.querySelectorAll("dt").forEach((dt) => {
+        const label = dt.innerText.trim();
+        const dd = dt.nextElementSibling;
+        if (dd && dd.tagName === "DD") {
+          specMap[label.replace(/\s+/g, "")] = dd.innerText.trim();
+        }
+      });
+    });
+    for (const [key, value] of Object.entries(specMap)) {
+      const k = key.toLowerCase();
+      if (!result.manufacturer && (k.includes("제조사") || k.includes("메이커") || k.includes("브랜드"))) {
         if (!isStoreName(value)) result.manufacturer = value;
       }
-      if (!result.size && (key.includes("스케일") || key.includes("사이즈") || key.includes("크기") || key.includes("전고") || key.includes("높이"))) {
+      if (!result.size && (k.includes("스케일") || k.includes("사이즈") || k.includes("크기") || k.includes("전고") || k.includes("높이"))) {
         result.size = value;
       }
-      if (!result.type && (key.includes("재질") || key.includes("소재"))) {
+      if (!result.type && (k.includes("재질") || k.includes("소재") || k.includes("사양"))) {
         result.type = value;
       }
-      if (!result.releaseDate && (key.includes("발매") || key.includes("예정일") || key.includes("발송"))) {
+      if (!result.releaseDate && (k.includes("발매") || k.includes("예정일") || k.includes("발송") || k.includes("입고"))) {
         result.releaseDate = value;
       }
-    });
+    }
   }
 
   // 본문 텍스트에서 상세 정보 추출
@@ -260,6 +276,7 @@ async function extractProductData() {
       /재질\s*[:：]\s*([^\n\r,]+)/,
       /소재\s*[:：]\s*([^\n\r,]+)/,
       /재료\s*[:：]\s*([^\n\r,]+)/,
+      /사양\s*[:：]\s*([^\n\r,]+)/,
     ];
     for (const p of typePatterns) {
       const m = bodyText.match(p);
@@ -267,8 +284,10 @@ async function extractProductData() {
     }
   }
 
-  // --- 발매일/예정일 ---
+  // --- 발매일/예정일/입고 ---
   const releaseDatePatterns = [
+    /입고\s*예정일?\s*[:：]\s*(\d{4}\s*년?\s*\d{1,2}\s*(?:월|분기))/,
+    /입고\s*예정일?\s*[:：]\s*(\d{2}\s*년\s*\d{1,2}\s*(?:월|분기))/,
     /예정일\s*[:：]\s*(\d{4}\s*년?\s*\d{1,2}\s*(?:월|분기))/,
     /예정일\s*[:：]\s*(\d{2}\s*년\s*\d{1,2}\s*(?:월|분기))/,
     /발매\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*(?:월|분기)?)/,

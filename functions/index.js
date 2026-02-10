@@ -25,7 +25,7 @@ exports.scrapeProduct = functions.region("asia-northeast3").https.onCall(async (
     const hostname = parsedUrl.hostname.toLowerCase();
 
     let result;
-    if (hostname.includes("comics-art") || hostname.includes("maniahouse")) {
+    if (hostname.includes("comics-art") || hostname.includes("maniahouse") || hostname.includes("herotime") || hostname.includes("rabbits")) {
       const html = await fetchPage(url);
       result = parseCafe24(html, url);
     } else if (hostname.includes("smartstore.naver.com")) {

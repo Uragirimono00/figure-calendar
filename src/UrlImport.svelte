@@ -164,6 +164,17 @@
                 </button>
             </div>
 
+            {#if !scraped}
+                <div class="supported-sites">
+                    <span class="supported-label">지원 사이트</span>
+                    <span class="site-badge">comics-art.co.kr</span>
+                    <span class="site-badge">maniahouse.co.kr</span>
+                    <span class="site-badge">smartstore.naver.com</span>
+                    <span class="site-badge">herotime.co.kr</span>
+                    <span class="site-badge">rabbits.kr</span>
+                </div>
+            {/if}
+
             {#if error}
                 <div class="error-msg">{error}</div>
             {/if}
@@ -353,6 +364,26 @@
     .btn-scrape:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+    }
+    .supported-sites {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-top: var(--space-3);
+        flex-wrap: wrap;
+    }
+    .supported-label {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        font-weight: 500;
+    }
+    .site-badge {
+        font-size: 0.6875rem;
+        padding: 2px 8px;
+        background: var(--color-surface-hover);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-full);
+        color: var(--color-text-secondary);
     }
     .error-msg {
         margin-top: var(--space-3);

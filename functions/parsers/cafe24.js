@@ -1,7 +1,7 @@
 const cheerio = require("cheerio");
 
 // 쇼핑몰 이름 필터 (제조사에서 제외)
-const STORE_NAMES = ["코믹스아트", "comicsart", "매니아하우스", "maniahouse"];
+const STORE_NAMES = ["코믹스아트", "comicsart", "매니아하우스", "maniahouse", "히어로타임", "herotime", "래빗츠", "rabbits"];
 
 function isStoreName(value) {
   const norm = value.toLowerCase().replace(/[\s\-_()（）]+/g, "");
@@ -52,7 +52,7 @@ function parseCafe24(html, url) {
               result.price = price;
             } else if (name.includes("잔금")) {
               result.remaining = price;
-            } else if (name.includes("예약금") || name.includes("1차결제") || name.includes("계약금")) {
+            } else if (name.includes("예약금") || name.includes("예약결제") || name.includes("1차결제") || name.includes("계약금")) {
               result.deposit = price;
             }
           }
@@ -133,11 +133,11 @@ function parseCafe24(html, url) {
       result.size = value;
     }
     // 재질
-    if (!result.type && (k.includes("재질") || k.includes("소재") || k.includes("재료"))) {
+    if (!result.type && (k.includes("재질") || k.includes("소재") || k.includes("재료") || k.includes("사양"))) {
       result.type = value;
     }
     // 발매일
-    if (!result.releaseDate && (k.includes("발매") || k.includes("예정일") || k.includes("발송"))) {
+    if (!result.releaseDate && (k.includes("발매") || k.includes("예정일") || k.includes("발송") || k.includes("입고"))) {
       result.releaseDate = value;
     }
   }
@@ -185,6 +185,7 @@ function parseCafe24(html, url) {
     const typePatterns = [
       /재질\s*[:：]\s*([^\n\r,]+)/,
       /소재\s*[:：]\s*([^\n\r,]+)/,
+      /사양\s*[:：]\s*([^\n\r,]+)/,
     ];
     for (const p of typePatterns) {
       const m = bodyText.match(p);
@@ -195,15 +196,17 @@ function parseCafe24(html, url) {
   // --- 발매일 추출 ---
   if (!result.releaseDate) {
     const releaseDatePatterns = [
-      /발매\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*월?)/,
-      /발매일\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*월?)/,
-      /발매\s*예정\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*월?)/,
+      /입고\s*예정일?\s*[:：]\s*(\d{4}\s*년?\s*\d{1,2}\s*(?:월|분기))/,
+      /입고\s*예정일?\s*[:：]\s*(\d{2}\s*년\s*\d{1,2}\s*(?:월|분기))/,
+      /발매\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*(?:월|분기)?)/,
+      /발매일\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*(?:월|분기)?)/,
+      /발매\s*예정\s*[:：]?\s*(\d{4}[년\-]\s*\d{1,2}\s*(?:월|분기)?)/,
       /(\d{4}年\d{1,2}月)/,
-      /(\d{4}\s*년\s*\d{1,2}\s*월)\s*발송/,
-      /발매\s*(?:월\s*)?[:：]?\s*(\d{2}년\s*\d{1,2}\s*월?)/,
-      /발매일\s*[:：]?\s*(\d{2}년\s*\d{1,2}\s*월?)/,
-      /발매\s*예정\s*[:：]?\s*(\d{2}년\s*\d{1,2}\s*월?)/,
-      /(\d{2}\s*년\s*\d{1,2}\s*월)\s*발송/,
+      /(\d{4}\s*년\s*\d{1,2}\s*(?:월|분기))\s*발송/,
+      /발매\s*(?:월\s*)?[:：]?\s*(\d{2}년\s*\d{1,2}\s*(?:월|분기)?)/,
+      /발매일\s*[:：]?\s*(\d{2}년\s*\d{1,2}\s*(?:월|분기)?)/,
+      /발매\s*예정\s*[:：]?\s*(\d{2}년\s*\d{1,2}\s*(?:월|분기)?)/,
+      /(\d{2}\s*년\s*\d{1,2}\s*(?:월|분기))\s*발송/,
     ];
     for (const pattern of releaseDatePatterns) {
       const match = bodyText.match(pattern);
@@ -230,6 +233,10 @@ function parseCafe24(html, url) {
       result.purchasePlace = "코아";
     } else if (hostname.includes("maniahouse")) {
       result.purchasePlace = "매하";
+    } else if (hostname.includes("herotime")) {
+      result.purchasePlace = "히어로타임";
+    } else if (hostname.includes("rabbits")) {
+      result.purchasePlace = "래빗츠";
     }
   } catch (e) {
     // ignore
