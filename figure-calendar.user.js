@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         피규어 캘린더
 // @namespace    figure-calendar
-// @version      1.3.2
+// @version      1.3.3
 // @description  피규어 상품 페이지에서 정보를 추출하여 피규어 캘린더에 저장합니다.
 // @match        *://figure-calendar.vercel.app/*
 // @match        *://localhost:*/*
@@ -26,6 +26,8 @@
 // @connect      securetoken.googleapis.com
 // @connect      firestore.googleapis.com
 // @connect      arca.live
+// @connect      firebasestorage.googleapis.com
+// @connect      ac.namu.la
 // @updateURL    https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js
 // @downloadURL  https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js
 // @run-at       document-idle
@@ -39,6 +41,7 @@
   const AUTH_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
   const FIRESTORE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
   const IDB_KEY = `firebase:authUser:${FIREBASE_API_KEY}:[DEFAULT]`;
+  const STORAGE_BUCKET = "figure-calendar.firebasestorage.app";
 
   const isFigureCalendarSite = location.hostname === "figure-calendar.vercel.app" || location.hostname === "localhost";
 
@@ -810,6 +813,104 @@
     });
   }
 
+  // --- 이미지 Firebase Storage 업로드 ---
+
+  function fetchImageAsBlob(url) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        responseType: "blob",
+        onload(res) {
+          if (res.status >= 200 && res.status < 300) {
+            resolve(res.response);
+          } else {
+            reject(new Error(`Image fetch failed: ${res.status}`));
+          }
+        },
+        onerror() {
+          reject(new Error("Image fetch network error"));
+        },
+      });
+    });
+  }
+
+  function blobToWebp(blob) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(blob);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        canvas.toBlob(
+          (webpBlob) => {
+            URL.revokeObjectURL(objectUrl);
+            if (webpBlob) resolve(webpBlob);
+            else reject(new Error("WebP conversion failed"));
+          },
+          "image/webp",
+          0.85
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Image decode failed"));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  function uploadBlobToStorage(filePath, blob, token) {
+    const encodedPath = encodeURIComponent(filePath);
+    const url = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o?uploadType=media&name=${encodedPath}`;
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "POST",
+        url,
+        headers: {
+          "Content-Type": blob.type || "image/webp",
+          Authorization: `Bearer ${token}`,
+        },
+        data: blob,
+        responseType: "json",
+        onload(res) {
+          if (res.status >= 200 && res.status < 300) {
+            const data = res.response;
+            const dlToken = data.downloadTokens;
+            const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedPath}?alt=media&token=${dlToken}`;
+            resolve({ downloadUrl, storagePath: filePath });
+          } else {
+            const err = new Error(`Storage upload failed: ${res.status}`);
+            err.status = res.status;
+            reject(err);
+          }
+        },
+        onerror() {
+          reject(new Error("Storage upload network error"));
+        },
+      });
+    });
+  }
+
+  async function uploadImageToStorage(imageUrl, month, token) {
+    const blob = await fetchImageAsBlob(imageUrl);
+    const webpBlob = await blobToWebp(blob);
+    const filePath = `images/${month}/${Date.now()}.webp`;
+    try {
+      return await uploadBlobToStorage(filePath, webpBlob, token);
+    } catch (err) {
+      if (err.status === 401 || err.status === 403) {
+        const refreshed = await refreshIdToken();
+        if (refreshed) {
+          return await uploadBlobToStorage(filePath, webpBlob, currentUser.idToken);
+        }
+      }
+      throw err;
+    }
+  }
+
   // --- 인증 ---
 
   let currentUser = GM_getValue("authUser", null);
@@ -1171,8 +1272,22 @@
       }
     }
 
+    // namu.la 이미지 → Firebase Storage에 업로드 (핫링크 차단 + URL 만료 대응)
+    let srcValue = $imageUrl.value;
+    let storagePathField = { nullValue: null };
+    if (srcValue && srcValue.includes("namu.la")) {
+      try {
+        $saveBtn.textContent = "이미지 업로드 중...";
+        const result = await uploadImageToStorage(srcValue, $month.value, currentUser.idToken);
+        srcValue = result.downloadUrl;
+        storagePathField = { stringValue: result.storagePath };
+      } catch (err) {
+        console.warn("[figure-calendar] 이미지 업로드 실패, URL 직접 저장:", err);
+      }
+    }
+
     const fields = {
-      src: { stringValue: $imageUrl.value },
+      src: { stringValue: srcValue },
       month: { stringValue: $month.value },
       date: { stringValue: new Date().toISOString() },
       description: { stringValue: $name.value },
@@ -1190,7 +1305,7 @@
       deposit: { stringValue: $deposit.value || "" },
       remaining: { stringValue: $remaining.value || "" },
       expectedCustoms: { stringValue: "" },
-      storagePath: { nullValue: null },
+      storagePath: storagePathField,
     };
 
     try {
