@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         피규어 캘린더
 // @namespace    figure-calendar
-// @version      1.3.3
+// @version      1.3.6
 // @description  피규어 상품 페이지에서 정보를 추출하여 피규어 캘린더에 저장합니다.
 // @match        *://figure-calendar.vercel.app/*
 // @match        *://localhost:*/*
@@ -27,7 +27,7 @@
 // @connect      firestore.googleapis.com
 // @connect      arca.live
 // @connect      firebasestorage.googleapis.com
-// @connect      ac.namu.la
+// @connect      namu.la
 // @updateURL    https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js
 // @downloadURL  https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js
 // @run-at       document-idle
@@ -430,6 +430,7 @@
     const result = {
       name: "",
       price: "",
+      priceCurrency: "KRW",
       deposit: "",
       remaining: "",
       imageUrl: "",
@@ -469,9 +470,32 @@
       const mfgMatch = articleText.match(/발매원\s*[:：]\s*([^\n\r]+)/);
       if (mfgMatch) result.manufacturer = mfgMatch[1].trim();
 
-      // 가격 (가격, 출시가, 판매가, 정가)
+      // 가격 (가격, 출시가, 판매가, 정가) — 숫자 + 통화 추출
       const priceMatch = articleText.match(/(?:가격|출시가|판매가|정가)\s*[:：]\s*([^\n\r]+)/);
-      if (priceMatch) result.price = priceMatch[1].trim();
+      if (priceMatch) {
+        const rawPrice = priceMatch[1].trim();
+        // 원 단위 금액 우선 추출 (예: "약 148,000원")
+        const wonMatch = rawPrice.match(/([\d,]+)\s*원/);
+        if (wonMatch) {
+          result.price = wonMatch[1].replace(/,/g, "");
+          result.priceCurrency = "KRW";
+        } else if (/[¥円엔]/.test(rawPrice)) {
+          const numMatch = rawPrice.match(/([\d,]+)/);
+          result.price = numMatch ? numMatch[1].replace(/,/g, "") : "";
+          result.priceCurrency = "JPY";
+        } else if (/위안|元|CNY|RMB/.test(rawPrice)) {
+          const numMatch = rawPrice.match(/([\d,]+)/);
+          result.price = numMatch ? numMatch[1].replace(/,/g, "") : "";
+          result.priceCurrency = "CNY";
+        } else if (/[＄$]|달러|USD/.test(rawPrice)) {
+          const numMatch = rawPrice.match(/([\d,.]+)/);
+          result.price = numMatch ? numMatch[1].replace(/,/g, "") : "";
+          result.priceCurrency = "USD";
+        } else {
+          const numMatch = rawPrice.match(/([\d,]+)/);
+          result.price = numMatch ? numMatch[1].replace(/,/g, "") : "";
+        }
+      }
 
       // 스케일/전고/크기 → size
       const scaleMatch = articleText.match(/(1\/\d+)\s*스케일/);
@@ -1069,10 +1093,21 @@
             <input type="text" id="figcal-name" />
           </div>
           <div class="figcal-fields-row">
-            <div class="figcal-field">
+            <div class="figcal-field" style="flex:2">
               <label>전체금액</label>
               <input type="text" id="figcal-price" />
             </div>
+            <div class="figcal-field" style="flex:1">
+              <label>통화</label>
+              <select id="figcal-priceCurrency">
+                <option value="KRW">₩ 원</option>
+                <option value="JPY">¥ 엔</option>
+                <option value="CNY">¥ 위안</option>
+                <option value="USD">$ 달러</option>
+              </select>
+            </div>
+          </div>
+          <div class="figcal-fields-row">
             <div class="figcal-field">
               <label>예약금</label>
               <input type="text" id="figcal-deposit" />
@@ -1132,6 +1167,7 @@
 
   const $name = panel.querySelector("#figcal-name");
   const $price = panel.querySelector("#figcal-price");
+  const $priceCurrency = panel.querySelector("#figcal-priceCurrency");
   const $deposit = panel.querySelector("#figcal-deposit");
   const $remaining = panel.querySelector("#figcal-remaining");
   const $releaseDate = panel.querySelector("#figcal-releaseDate");
@@ -1169,6 +1205,7 @@
 
       $name.value = data.name || "";
       $price.value = data.price || "";
+      $priceCurrency.value = data.priceCurrency || "KRW";
       $deposit.value = data.deposit || "";
       $remaining.value = data.remaining || "";
       $releaseDate.value = data.releaseDate || "";
@@ -1293,7 +1330,7 @@
       description: { stringValue: $name.value },
       uid: { stringValue: currentUser.localId },
       status: { stringValue: "꼴림" },
-      teamStatus: { stringValue: $purchasePlace.value || "코아" },
+      teamStatus: { stringValue: $purchasePlace.value },
       purchaseStatus: { stringValue: "찜" },
       manufacturer: { stringValue: $manufacturer.value },
       releaseDate: { stringValue: $releaseDate.value },
@@ -1302,6 +1339,7 @@
       type: { stringValue: (extractedData && extractedData.type) || "PVC" },
       size: { stringValue: (extractedData && extractedData.size) || "" },
       price: { stringValue: $price.value || "" },
+      priceCurrency: { stringValue: $priceCurrency.value || "KRW" },
       deposit: { stringValue: $deposit.value || "" },
       remaining: { stringValue: $remaining.value || "" },
       expectedCustoms: { stringValue: "" },

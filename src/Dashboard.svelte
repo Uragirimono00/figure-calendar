@@ -459,7 +459,7 @@
     modalVisible = true;
   }
   async function handleModalSave(event) {
-    const { description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, deposit, remaining, expectedCustoms, purchaseDate, purchasePlace } = event.detail;
+    const { description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, priceCurrency, deposit, remaining, expectedCustoms, purchaseDate, purchasePlace } = event.detail;
     modalImage.description = description;
     modalImage.status = status;
     modalImage.teamStatus = teamStatus;
@@ -469,6 +469,7 @@
     modalImage.type = type;
     modalImage.size = size;
     modalImage.price = price;
+    modalImage.priceCurrency = priceCurrency;
     modalImage.deposit = deposit;
     modalImage.remaining = remaining;
     modalImage.expectedCustoms = expectedCustoms;
@@ -477,7 +478,7 @@
     images = [...images];
     try {
       await updateDoc(doc(db, "images", modalImage.id), {
-        description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, deposit, remaining, expectedCustoms, purchaseDate, purchasePlace
+        description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, priceCurrency, deposit, remaining, expectedCustoms, purchaseDate, purchasePlace
       });
     } catch (error) {
       console.error("저장 실패:", error);
@@ -605,7 +606,9 @@
     sidebarVisible = !sidebarVisible;
   }
 
-  $: totalPrice = images.reduce((sum, img) => sum + (Number(img.price) || 0), 0);
+  const CURRENCY_SYMBOLS = { KRW: "₩", JPY: "¥", CNY: "¥", USD: "$" };
+  function currencySymbol(code) { return CURRENCY_SYMBOLS[code] || "₩"; }
+  $: totalPrice = images.reduce((sum, img) => sum + ((!img.priceCurrency || img.priceCurrency === "KRW") ? (Number(img.price) || 0) : 0), 0);
   $: totalDeposit = images.reduce((sum, img) => sum + (Number(img.deposit) || 0), 0);
   $: totalRemaining = images.reduce((sum, img) => sum + (Number(img.remaining) || 0), 0);
   $: totalCustoms = images.reduce((sum, img) => sum + (Number(img.expectedCustoms) || 0), 0);
@@ -613,6 +616,11 @@
   function formatNumber(n) {
     const num = Number(n);
     return isNaN(num) ? "0" : num.toLocaleString();
+  }
+  function formatPrice(img) {
+    const sym = currencySymbol(img.priceCurrency);
+    const num = Number(img.price) || 0;
+    return sym + num.toLocaleString();
   }
   visibleColumns = {
     ...visibleColumns,
@@ -1330,7 +1338,8 @@
                   </td>
                 {/if}
                 {#if visibleColumns.price}
-                  <td>
+                  <td class="price-cell">
+                    <span class="currency-tag">{currencySymbol(img.priceCurrency)}</span>
                     <input type="number" value={img.price} on:blur={(e) => updateImageField(img, 'price', e.target.value)} />
                   </td>
                 {/if}
@@ -2060,6 +2069,16 @@
     height: 48px;
     object-fit: cover;
     border-radius: var(--radius-sm);
+  }
+  .price-cell {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .currency-tag {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
   }
 
   /* ===== Board View ===== */

@@ -6,13 +6,14 @@
 
     let description = image.description || "";
     let status = image.status || "예약금";
-    let teamStatus = image.teamStatus || "코아";
+    let teamStatus = image.teamStatus || "";
     let purchaseStatus = image.purchaseStatus || "구매";
     let manufacturer = image.manufacturer || "";
     let releaseDate = image.releaseDate || "";
 
     let type = image.type || "PVC";
     let size = image.size || "";
+    let priceCurrency = image.priceCurrency || "KRW";
     let priceRaw = image.price ? String(image.price) : "";
     let depositRaw = image.deposit ? String(image.deposit) : "";
     let remainingRaw = image.remaining ? String(image.remaining) : "";
@@ -71,6 +72,7 @@
             type,
             size,
             price: priceRaw,
+            priceCurrency,
             deposit: depositRaw,
             remaining: remainingRaw,
             expectedCustoms: expectedCustomsRaw,
@@ -144,6 +146,7 @@
                     <div class="field">
                         <label for="modal-team">구매처</label>
                         <select id="modal-team" bind:value={teamStatus} on:change={save}>
+                            <option value="">미정</option>
                             <option value="코아">코아</option>
                             <option value="매하">매하</option>
                             <option value="히탐">히탐</option>
@@ -183,7 +186,15 @@
 
                     <div class="field">
                         <label for="modal-price">금액</label>
-                        <input id="modal-price" type="text" value={priceFormatted} on:input={handlePriceInput} placeholder="0" />
+                        <div class="price-with-currency">
+                            <input id="modal-price" type="text" value={priceFormatted} on:input={handlePriceInput} placeholder="0" />
+                            <select bind:value={priceCurrency} on:change={save} class="currency-select">
+                                <option value="KRW">₩</option>
+                                <option value="JPY">¥</option>
+                                <option value="CNY">元</option>
+                                <option value="USD">$</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="field">
@@ -365,6 +376,21 @@
         resize: vertical;
         min-height: 72px;
         line-height: 1.5;
+    }
+    .price-with-currency {
+        display: flex;
+        gap: var(--space-1);
+    }
+    .price-with-currency input {
+        flex: 1;
+        min-width: 0;
+    }
+    .currency-select {
+        width: 52px;
+        flex-shrink: 0;
+        text-align: center;
+        padding: var(--space-2) var(--space-1) !important;
+        font-size: 0.8125rem !important;
     }
     .fields-grid {
         display: grid;
