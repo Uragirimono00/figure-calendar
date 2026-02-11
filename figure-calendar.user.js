@@ -4,6 +4,7 @@
 // @version      1.2.0
 // @description  피규어 상품 페이지에서 정보를 추출하여 피규어 캘린더에 저장합니다.
 // @match        *://figure-calendar.vercel.app/*
+// @match        *://localhost:*/*
 // @match        *://comics-art.co.kr/*
 // @match        *://*.comics-art.co.kr/*
 // @match        *://maniahouse.co.kr/*
@@ -39,12 +40,14 @@
   const FIRESTORE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
   const IDB_KEY = `firebase:authUser:${FIREBASE_API_KEY}:[DEFAULT]`;
 
-  const isFigureCalendarSite = location.hostname === "figure-calendar.vercel.app";
+  const isFigureCalendarSite = location.hostname === "figure-calendar.vercel.app" || location.hostname === "localhost";
 
   // ============================================================
   //  피규어 캘린더 사이트: 로그인 정보 자동 동기화
   // ============================================================
   if (isFigureCalendarSite) {
+    unsafeWindow.__FIGCAL_TM__ = true;
+
     GM_addStyle(`
       #figcal-sync-badge {
         position: fixed;

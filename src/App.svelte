@@ -12,6 +12,7 @@
     let showSignup = false;
     let darkMode = false;
     let showTmBanner = false;
+    let tmBannerHeight = 0;
     // 현재 해시값에 따라 페이지를 분기 (기본값은 "dashboard")
     let currentPage = "dashboard";
 
@@ -27,6 +28,16 @@
     }
 
     window.addEventListener("hashchange", updatePage);
+
+    $: {
+        if (typeof document !== 'undefined') {
+            if (showTmBanner) {
+                document.documentElement.style.setProperty('--tm-banner-h', tmBannerHeight + 'px');
+            } else {
+                document.documentElement.style.removeProperty('--tm-banner-h');
+            }
+        }
+    }
 
     function dismissTmBanner() {
         showTmBanner = false;
@@ -79,7 +90,7 @@
 </script>
 
 {#if showTmBanner}
-    <div class="tm-banner" class:tm-banner-visible={showTmBanner}>
+    <div class="tm-banner" bind:clientHeight={tmBannerHeight}>
         <div class="tm-banner-inner">
             <span class="tm-banner-text">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -213,14 +224,19 @@
 
     /* Tampermonkey 설치 안내 배너 */
     .tm-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 60;
         background: var(--color-primary);
         color: #fff;
         overflow: hidden;
         animation: tm-slide-down 0.3s ease-out;
     }
     @keyframes tm-slide-down {
-        from { max-height: 0; opacity: 0; }
-        to   { max-height: 80px; opacity: 1; }
+        from { transform: translateY(-100%); opacity: 0; }
+        to   { transform: translateY(0); opacity: 1; }
     }
     .tm-banner-inner {
         display: flex;
@@ -273,5 +289,12 @@
     .tm-banner-close:hover {
         color: #fff;
         background: rgba(255, 255, 255, 0.15);
+    }
+
+    :global(.dashboard-header) {
+        top: var(--tm-banner-h, 0px) !important;
+    }
+    :global(.dashboard) {
+        padding-top: calc(56px + var(--tm-banner-h, 0px)) !important;
     }
 </style>
