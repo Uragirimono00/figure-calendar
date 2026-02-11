@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         피규어 캘린더
 // @namespace    figure-calendar
-// @version      1.3.0
+// @version      1.3.1
 // @description  피규어 상품 페이지에서 정보를 추출하여 피규어 캘린더에 저장합니다.
 // @match        *://figure-calendar.vercel.app/*
 // @match        *://localhost:*/*
@@ -1320,19 +1320,26 @@
       }
     `);
 
-    // 리프레셔 버튼 찾기
-    let refresherWrapper = null;
-    document.querySelectorAll(".navbar-nav > div > li > a.nav-link, .navbar-nav > li > a.nav-link").forEach((link) => {
-      if (link.textContent.includes("리프레셔")) {
-        refresherWrapper = link.closest("div") || link.closest("li");
-      }
-    });
+    // 네비게이션 바 찾기
+    const navbar = document.querySelector(".navbar-nav");
 
-    if (refresherWrapper && refresherWrapper.parentNode) {
+    if (navbar) {
+      // 삽입 위치: 리프레셔 뒤 또는 검색 앞
+      let insertBefore = null;
+      navbar.querySelectorAll(":scope > div > li > a.nav-link, :scope > li > a.nav-link").forEach((link) => {
+        if (link.textContent.includes("리프레셔")) {
+          const wrapper = link.closest("div") || link.closest("li");
+          insertBefore = wrapper ? wrapper.nextSibling : null;
+        }
+      });
+      if (!insertBefore) {
+        insertBefore = navbar.querySelector(".nav-channel-search-wrapper, .nav-channel-mobile-search-wrapper");
+      }
+
       // 네비게이션 버튼 삽입
       const navWrapper = document.createElement("div");
       navWrapper.innerHTML = `<li class="nav-item dropdown"><a class="nav-link" href="#" id="figcal-nav-btn" style="cursor:pointer"><span class="d-inline">피규어 캘린더</span></a></li>`;
-      refresherWrapper.parentNode.insertBefore(navWrapper, refresherWrapper.nextSibling);
+      navbar.insertBefore(navWrapper, insertBefore);
 
       // 모달 생성
       const backdrop = document.createElement("div");
