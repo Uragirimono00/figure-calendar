@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         피규어 캘린더
 // @namespace    figure-calendar
-// @version      1.3.1
+// @version      1.3.2
 // @description  피규어 상품 페이지에서 정보를 추출하여 피규어 캘린더에 저장합니다.
 // @match        *://figure-calendar.vercel.app/*
 // @match        *://localhost:*/*
@@ -1320,10 +1320,12 @@
       }
     `);
 
-    // 네비게이션 바 찾기
-    const navbar = document.querySelector(".navbar-nav");
+    function initArcaNav() {
+      if (document.getElementById("figcal-nav-btn")) return; // 이미 삽입됨
 
-    if (navbar) {
+      const navbar = document.querySelector(".navbar-nav");
+      if (!navbar) return false;
+
       // 삽입 위치: 리프레셔 뒤 또는 검색 앞
       let insertBefore = null;
       navbar.querySelectorAll(":scope > div > li > a.nav-link, :scope > li > a.nav-link").forEach((link) => {
@@ -1391,6 +1393,18 @@
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && backdrop.classList.contains("open")) closeModal();
       });
+
+      return true;
+    }
+
+    // 즉시 시도 후, 실패하면 네비바가 나타날 때까지 감시
+    if (!initArcaNav()) {
+      const observer = new MutationObserver(() => {
+        if (initArcaNav()) observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      // 10초 후 포기
+      setTimeout(() => observer.disconnect(), 10000);
     }
   }
 })();
