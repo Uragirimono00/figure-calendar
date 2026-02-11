@@ -11,6 +11,7 @@
     let user = null;
     let showSignup = false;
     let darkMode = false;
+    let showTmBanner = false;
     // 현재 해시값에 따라 페이지를 분기 (기본값은 "dashboard")
     let currentPage = "dashboard";
 
@@ -27,8 +28,22 @@
 
     window.addEventListener("hashchange", updatePage);
 
+    function dismissTmBanner() {
+        showTmBanner = false;
+        localStorage.setItem("figcal-tm-banner-dismissed", "true");
+    }
+
     onMount(() => {
         updatePage();
+
+        // Tampermonkey 설치 여부 감지
+        if (!localStorage.getItem("figcal-tm-banner-dismissed")) {
+            setTimeout(() => {
+                if (!window.__FIGCAL_TM__) {
+                    showTmBanner = true;
+                }
+            }, 1000);
+        }
 
         // 다크모드 초기 설정 (기본값 true)
         if (localStorage.getItem("darkMode") === null) {
@@ -62,6 +77,30 @@
         }
     }
 </script>
+
+{#if showTmBanner}
+    <div class="tm-banner" class:tm-banner-visible={showTmBanner}>
+        <div class="tm-banner-inner">
+            <span class="tm-banner-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Tampermonkey 유저스크립트를 설치하면 쇼핑몰에서 바로 피규어를 저장할 수 있어요!
+            </span>
+            <div class="tm-banner-actions">
+                <a
+                    class="tm-banner-install"
+                    href="https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    설치하기
+                </a>
+                <button class="tm-banner-close" on:click={dismissTmBanner} title="닫기">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
 
 {#if currentPage === "privacy"}
     <PrivacyPolicy />
@@ -170,5 +209,69 @@
         color: var(--color-primary);
         border-color: var(--color-primary);
         transform: scale(1.05);
+    }
+
+    /* Tampermonkey 설치 안내 배너 */
+    .tm-banner {
+        background: var(--color-primary);
+        color: #fff;
+        overflow: hidden;
+        animation: tm-slide-down 0.3s ease-out;
+    }
+    @keyframes tm-slide-down {
+        from { max-height: 0; opacity: 0; }
+        to   { max-height: 80px; opacity: 1; }
+    }
+    .tm-banner-inner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-4);
+        padding: var(--space-2) var(--space-4);
+        max-width: 1280px;
+        margin: 0 auto;
+        flex-wrap: wrap;
+    }
+    .tm-banner-text {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .tm-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+    .tm-banner-install {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+        text-decoration: none;
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-sm);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        transition: background var(--transition-fast);
+    }
+    .tm-banner-install:hover {
+        background: rgba(255, 255, 255, 0.35);
+        text-decoration: none;
+    }
+    .tm-banner-close {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-1);
+        border-radius: var(--radius-sm);
+        transition: color var(--transition-fast), background var(--transition-fast);
+    }
+    .tm-banner-close:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.15);
     }
 </style>
