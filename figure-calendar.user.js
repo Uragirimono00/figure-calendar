@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         피규어 캘린더
 // @namespace    figure-calendar
-// @version      1.1.0
+// @version      1.2.0
 // @description  피규어 상품 페이지에서 정보를 추출하여 피규어 캘린더에 저장합니다.
 // @match        *://figure-calendar.vercel.app/*
 // @match        *://comics-art.co.kr/*
