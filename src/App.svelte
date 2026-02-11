@@ -7,6 +7,7 @@
     import Dashboard from "./Dashboard.svelte";
     import PatchNotes from "./PatchNotes.svelte";
     import PrivacyPolicy from "./PrivacyPolicy.svelte";
+    import FeatureRequests from "./FeatureRequests.svelte";
 
     let user = null;
     let showSignup = false;
@@ -22,6 +23,8 @@
             currentPage = "patch-notes";
         } else if (hash === "#/privacy") {
             currentPage = "privacy";
+        } else if (hash === "#/requests") {
+            currentPage = "requests";
         } else {
             currentPage = "dashboard";
         }
@@ -126,6 +129,8 @@
         <Dashboard {user} />
     {:else if currentPage === "patch-notes"}
         <PatchNotes />
+    {:else if currentPage === "requests"}
+        <FeatureRequests {user} />
     {/if}
 {/if}
 
@@ -141,6 +146,12 @@
             <a href="#/patch-notes">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 패치노트
+            </a>
+        {/if}
+        {#if currentPage !== "requests"}
+            <a href="#/requests">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                기능 요청
             </a>
         {/if}
         {#if currentPage !== "privacy"}
