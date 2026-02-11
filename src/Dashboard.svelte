@@ -128,7 +128,7 @@
 
   let viewMode = 'grid';
   let sortCriteria = [];
-  $: if (viewMode === 'table' && sortCriteria.length === 0) {
+  $: if ((viewMode === 'table' || viewMode === 'board') && sortCriteria.length === 0) {
     sortCriteria = [{ column: 'month', direction: 'asc' }];
   }
   let visibleColumns = {
@@ -141,6 +141,7 @@
     type: true,
     size: true,
     price: true,
+    deposit: true,
     remaining: true,
     expectedCustoms: true
   };
@@ -240,6 +241,8 @@
   let filterSize = "";
   let filterPriceMin = "";
   let filterPriceMax = "";
+  let filterDepositMin = "";
+  let filterDepositMax = "";
   let filterRemainingMin = "";
   let filterRemainingMax = "";
   let filterExpectedCustomsMin = "";
@@ -247,6 +250,7 @@
 
   $: filteredImages = images.filter(img => {
     const price = Number(img.price) || 0;
+    const deposit = Number(img.deposit) || 0;
     const remaining = Number(img.remaining) || 0;
     const expectedCustoms = Number(img.expectedCustoms) || 0;
     const imgPurchaseStatus = img.purchaseStatus || "구매";
@@ -259,6 +263,8 @@
             && (!filterSize || img.size === filterSize)
             && (!filterPriceMin || price >= Number(filterPriceMin))
             && (!filterPriceMax || price <= Number(filterPriceMax))
+            && (!filterDepositMin || deposit >= Number(filterDepositMin))
+            && (!filterDepositMax || deposit <= Number(filterDepositMax))
             && (!filterRemainingMin || remaining >= Number(filterRemainingMin))
             && (!filterRemainingMax || remaining <= Number(filterRemainingMax))
             && (!filterExpectedCustomsMin || expectedCustoms >= Number(filterExpectedCustomsMin))
@@ -274,6 +280,7 @@
     type: false,
     size: false,
     price: false,
+    deposit: false,
     remaining: false,
     expectedCustoms: false
   };
@@ -295,7 +302,7 @@
         if (monthA !== monthB) {
           return direction === "asc" ? monthA - monthB : monthB - monthA;
         }
-      } else if (["price", "remaining", "expectedCustoms"].includes(column)) {
+      } else if (["price", "deposit", "remaining", "expectedCustoms"].includes(column)) {
         valA = Number(valA) || 0;
         valB = Number(valB) || 0;
         if (valA !== valB) {
@@ -308,6 +315,8 @@
     }
     return 0;
   });
+
+  $: boardImages = sortedFilteredImages.filter(img => img.month.startsWith(selectedYear + '-') || img.month === '미정');
 
   let currentMonthIndex = 0;
   function prevYear() {
@@ -331,6 +340,118 @@
     if (currentMonthIndex < months.length - 1) currentMonthIndex++;
   }
 
+  // 스와이프/드래그 제스처 (실시간 추적 + 애니메이션)
+  let swipeStartX = 0;
+  let swipeStartY = 0;
+  let isSwiping = false;
+  let swipeLocked = false;
+  let swipeOffset = 0;
+  let swipeAnimating = false;
+
+  function canNavigateSwipe(goingLeft) {
+    if (viewMode === 'single') {
+      return goingLeft
+        ? (currentMonthIndex < 11 || parseInt(selectedYear) < endYear)
+        : (currentMonthIndex > 0 || parseInt(selectedYear) > startYear);
+    }
+    return goingLeft ? parseInt(selectedYear) < endYear : parseInt(selectedYear) > startYear;
+  }
+
+  function navigateSwipe(goingLeft) {
+    if (viewMode === 'single') {
+      if (goingLeft) {
+        if (currentMonthIndex < 11) { currentMonthIndex++; }
+        else {
+          let y = parseInt(selectedYear);
+          if (y < endYear) { selectedYear = (y + 1).toString(); currentMonthIndex = 0; }
+        }
+      } else {
+        if (currentMonthIndex > 0) { currentMonthIndex--; }
+        else {
+          let y = parseInt(selectedYear);
+          if (y > startYear) { selectedYear = (y - 1).toString(); currentMonthIndex = 11; }
+        }
+      }
+    } else {
+      if (goingLeft) nextYear(); else prevYear();
+    }
+  }
+
+  function handleSwipeStart(e) {
+    if (viewMode === 'table' || swipeAnimating) return;
+    const point = e.touches ? e.touches[0] : e;
+    swipeStartX = point.clientX;
+    swipeStartY = point.clientY;
+    isSwiping = true;
+    swipeLocked = false;
+    swipeOffset = 0;
+  }
+
+  function handleSwipeMove(e) {
+    if (!isSwiping || viewMode === 'table') return;
+    const point = e.touches ? e.touches[0] : e;
+    const dx = point.clientX - swipeStartX;
+    const dy = point.clientY - swipeStartY;
+
+    if (!swipeLocked) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dy) > Math.abs(dx)) { isSwiping = false; return; }
+      swipeLocked = true;
+    }
+
+    swipeOffset = dx * 0.35;
+    if (e.cancelable && e.type === 'touchmove') e.preventDefault();
+  }
+
+  function handleSwipeEnd(e) {
+    if (!isSwiping) return;
+    isSwiping = false;
+    if (viewMode === 'table') { swipeOffset = 0; return; }
+
+    const point = e.changedTouches ? e.changedTouches[0] : e;
+    const rawDelta = point.clientX - swipeStartX;
+    const goingLeft = rawDelta < 0;
+    const shouldNavigate = Math.abs(rawDelta) >= 50 && swipeLocked && canNavigateSwipe(goingLeft);
+
+    if (shouldNavigate) {
+      swipeAnimating = true;
+      swipeOffset = goingLeft ? -window.innerWidth : window.innerWidth;
+
+      setTimeout(() => {
+        navigateSwipe(goingLeft);
+        swipeAnimating = false;
+        swipeOffset = goingLeft ? window.innerWidth * 0.6 : -window.innerWidth * 0.6;
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            swipeAnimating = true;
+            swipeOffset = 0;
+            setTimeout(() => { swipeAnimating = false; }, 300);
+          });
+        });
+      }, 250);
+    } else {
+      swipeAnimating = true;
+      swipeOffset = 0;
+      setTimeout(() => { swipeAnimating = false; }, 300);
+    }
+  }
+
+  $: swipeOpacity = Math.max(1 - Math.abs(swipeOffset) / 400, 0);
+
+  onMount(() => {
+    window.addEventListener('mousemove', handleSwipeMove);
+    window.addEventListener('mouseup', handleSwipeEnd);
+    window.addEventListener('touchmove', handleSwipeMove, { passive: false });
+    window.addEventListener('touchend', handleSwipeEnd);
+    return () => {
+      window.removeEventListener('mousemove', handleSwipeMove);
+      window.removeEventListener('mouseup', handleSwipeEnd);
+      window.removeEventListener('touchmove', handleSwipeMove);
+      window.removeEventListener('touchend', handleSwipeEnd);
+    };
+  });
+
   let modalVisible = false;
   let modalImage = null;
   function handleImageClicked(event) {
@@ -338,7 +459,7 @@
     modalVisible = true;
   }
   async function handleModalSave(event) {
-    const { description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, remaining, expectedCustoms, purchaseDate } = event.detail;
+    const { description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, deposit, remaining, expectedCustoms, purchaseDate, purchasePlace } = event.detail;
     modalImage.description = description;
     modalImage.status = status;
     modalImage.teamStatus = teamStatus;
@@ -348,13 +469,15 @@
     modalImage.type = type;
     modalImage.size = size;
     modalImage.price = price;
+    modalImage.deposit = deposit;
     modalImage.remaining = remaining;
     modalImage.expectedCustoms = expectedCustoms;
     modalImage.purchaseDate = purchaseDate;
+    modalImage.purchasePlace = purchasePlace;
     images = [...images];
     try {
       await updateDoc(doc(db, "images", modalImage.id), {
-        description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, remaining, expectedCustoms, purchaseDate
+        description, status, teamStatus, purchaseStatus, manufacturer, releaseDate, type, size, price, deposit, remaining, expectedCustoms, purchaseDate, purchasePlace
       });
     } catch (error) {
       console.error("저장 실패:", error);
@@ -483,6 +606,7 @@
   }
 
   $: totalPrice = images.reduce((sum, img) => sum + (Number(img.price) || 0), 0);
+  $: totalDeposit = images.reduce((sum, img) => sum + (Number(img.deposit) || 0), 0);
   $: totalRemaining = images.reduce((sum, img) => sum + (Number(img.remaining) || 0), 0);
   $: totalCustoms = images.reduce((sum, img) => sum + (Number(img.expectedCustoms) || 0), 0);
   $: overallTotal = totalPrice + totalRemaining + totalCustoms;
@@ -494,19 +618,21 @@
     ...visibleColumns,
     type: visibleColumns.type ?? true,
     size: visibleColumns.size ?? true,
-    purchaseStatus: visibleColumns.purchaseStatus ?? true
+    purchaseStatus: visibleColumns.purchaseStatus ?? true,
+    deposit: visibleColumns.deposit ?? true
   };
   filterVisible = {
     ...filterVisible,
     type: false,
     size: false,
-    purchaseStatus: false
+    purchaseStatus: false,
+    deposit: false
   };
   const purchaseStatusOptions = ["", "구매", "찜"];
   const typeOptions = ["", "PVC", "레진"];
   const sizeOptions = ["", "1/1", "1/1.5", "1/2", "1/2.5", "1/3", "1/3.5", "1/4", "1/4.5", "1/5", "1/5.5", "1/6", "1/6.5", "1/7", "1/7.5", "1/8", "1/8.5", "1/9", "1/9.5", "1/10", "1/10.5", "1/11", "1/11.5", "1/12"];
   const statusOptions = ["", "예약금", "전액", "꼴림"];
-  const teamStatusOptions = ["", "코아", "매하", "히탐", "래빗츠", "유메", "위북", "드리머", "중고"];
+  const teamStatusOptions = ["", "코아", "매하", "히탐", "래빗츠", "네이버", "히어로타임", "유메", "위북", "드리머", "ASL", "중고"];
 
   async function updateImageField(image, field, newValue) {
     try {
@@ -541,7 +667,8 @@
     type: '종류',
     size: '사이즈',
     price: '금액',
-    remaining: '남은 금액',
+    deposit: '예약금',
+    remaining: '잔금',
     expectedCustoms: '예상 관세'
   };
 
@@ -554,7 +681,8 @@
     type: '종류',
     size: '사이즈',
     price: '금액',
-    remaining: '남은 금액',
+    deposit: '예약금',
+    remaining: '잔금',
     expectedCustoms: '예상 관세'
   };
 </script>
@@ -574,6 +702,10 @@
         <button on:click={() => viewMode = 'table'} class:active={viewMode==='table'} title="표로보기">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           <span class="view-label">테이블</span>
+        </button>
+        <button on:click={() => viewMode = 'board'} class:active={viewMode==='board'} title="게시판으로보기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="17" width="18" height="4" rx="1"/></svg>
+          <span class="view-label">게시판</span>
         </button>
       </div>
       <div class="header-actions">
@@ -615,7 +747,11 @@
             <span class="total-value">{formatNumber(totalPrice)}원</span>
           </div>
           <div class="total-card">
-            <span class="total-label">남은 금액</span>
+            <span class="total-label">예약금</span>
+            <span class="total-value">{formatNumber(totalDeposit)}원</span>
+          </div>
+          <div class="total-card">
+            <span class="total-label">잔금</span>
             <span class="total-value">{formatNumber(totalRemaining)}원</span>
           </div>
           <div class="total-card">
@@ -681,7 +817,11 @@
     </div>
   {/if}
 
-  <div class="capture-area">
+  <div class="capture-area"
+       class:swiping={isSwiping && swipeLocked}
+       style="transform: translateX({swipeOffset}px); opacity: {swipeOpacity}; {swipeAnimating ? 'transition: transform 0.3s ease, opacity 0.3s ease;' : ''}"
+       on:mousedown={handleSwipeStart}
+       on:touchstart|passive={handleSwipeStart}>
     {#if viewMode === 'grid'}
       <div class="months-grid">
         {#each months as monthKey}
@@ -729,6 +869,158 @@
                   on:statusToggled={handleStatusToggled}
                   on:teamStatusToggled={handleTeamStatusToggled}
                   on:imageMoved={handleImageMoved} />
+        </div>
+      </div>
+    {:else if viewMode === 'board'}
+      <div class="board-view">
+        <div class="table-toolbar">
+          <button class="toolbar-btn" class:active={filterPanelOpen} on:click={() => filterPanelOpen = !filterPanelOpen}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            필터
+          </button>
+        </div>
+
+        {#if filterPanelOpen}
+          <div class="panel filter-panel">
+            <div class="filter-chips">
+              {#each Object.entries(filterLabels) as [key, label]}
+                <button class="chip" class:active={filterVisible[key]} on:click={() => filterVisible[key] = !filterVisible[key]}>
+                  {label}
+                </button>
+              {/each}
+            </div>
+            <div class="filter-fields">
+              {#if filterVisible.month}
+                <div class="filter-field">
+                  <label>연월</label>
+                  <input type="text" bind:value={filterMonth} placeholder="연월 검색" list="monthListBoard" />
+                  <datalist id="monthListBoard">
+                    {#each months as m}
+                      <option value={m} />
+                    {/each}
+                  </datalist>
+                </div>
+              {/if}
+              {#if filterVisible.description}
+                <div class="filter-field">
+                  <label>설명</label>
+                  <input type="text" bind:value={filterDescription} placeholder="설명 검색" />
+                </div>
+              {/if}
+              {#if filterVisible.purchaseStatus}
+                <div class="filter-field">
+                  <label>구매 상태</label>
+                  <select bind:value={filterPurchaseStatus}>
+                    {#each purchaseStatusOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+              {#if filterVisible.status}
+                <div class="filter-field">
+                  <label>결제 상태</label>
+                  <select bind:value={filterStatus}>
+                    {#each statusOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+              {#if filterVisible.teamStatus}
+                <div class="filter-field">
+                  <label>구매처</label>
+                  <select bind:value={filterTeamStatus}>
+                    {#each teamStatusOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+              {#if filterVisible.type}
+                <div class="filter-field">
+                  <label>종류</label>
+                  <select bind:value={filterType}>
+                    {#each typeOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+              {#if filterVisible.size}
+                <div class="filter-field">
+                  <label>사이즈</label>
+                  <select bind:value={filterSize}>
+                    {#each sizeOptions as opt}
+                      <option value={opt}>{opt === "" ? "전체" : opt}</option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+              {#if filterVisible.price}
+                <div class="filter-field filter-range">
+                  <label>금액</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterPriceMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterPriceMax} placeholder="최대" />
+                  </div>
+                </div>
+              {/if}
+              {#if filterVisible.deposit}
+                <div class="filter-field filter-range">
+                  <label>예약금</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterDepositMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterDepositMax} placeholder="최대" />
+                  </div>
+                </div>
+              {/if}
+              {#if filterVisible.remaining}
+                <div class="filter-field filter-range">
+                  <label>잔금</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterRemainingMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterRemainingMax} placeholder="최대" />
+                  </div>
+                </div>
+              {/if}
+              {#if filterVisible.expectedCustoms}
+                <div class="filter-field filter-range">
+                  <label>예상 관세</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterExpectedCustomsMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterExpectedCustomsMax} placeholder="최대" />
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        <div class="board-list">
+          {#each boardImages as img}
+            <div class="board-item" on:click={() => { modalImage = img; modalVisible = true; }}>
+              <img src={img.src} alt="" class="board-thumb" />
+              <div class="board-info">
+                <div class="board-title">{img.description || '(제목 없음)'}</div>
+                <div class="board-meta">
+                  {#if img.manufacturer}<span>{img.manufacturer}</span>{/if}
+                  {#if img.manufacturer && img.releaseDate}<span class="board-meta-sep"> · </span>{/if}
+                  {#if img.releaseDate}<span>{img.releaseDate}</span>{:else}<span>{img.month}</span>{/if}
+                </div>
+              </div>
+              <span class="board-badge" class:badge-purchase={(img.purchaseStatus || '구매') === '구매'} class:badge-wish={img.purchaseStatus === '찜'}>
+                {img.purchaseStatus || '구매'}
+              </span>
+            </div>
+          {/each}
+          {#if boardImages.length === 0}
+            <div class="board-empty">표시할 항목이 없습니다.</div>
+          {/if}
         </div>
       </div>
     {:else if viewMode === 'table'}
@@ -831,9 +1123,19 @@
                   </div>
                 </div>
               {/if}
+              {#if filterVisible.deposit}
+                <div class="filter-field filter-range">
+                  <label>예약금</label>
+                  <div class="range-inputs">
+                    <input type="text" bind:value={filterDepositMin} placeholder="최소" />
+                    <span class="range-sep">~</span>
+                    <input type="text" bind:value={filterDepositMax} placeholder="최대" />
+                  </div>
+                </div>
+              {/if}
               {#if filterVisible.remaining}
                 <div class="filter-field filter-range">
-                  <label>남은 금액</label>
+                  <label>잔금</label>
                   <div class="range-inputs">
                     <input type="text" bind:value={filterRemainingMin} placeholder="최소" />
                     <span class="range-sep">~</span>
@@ -938,9 +1240,17 @@
                   {/if}
                 </th>
               {/if}
+              {#if visibleColumns.deposit}
+                <th class="sortable" on:click={() => handleSort('deposit')}>
+                  예약금
+                  {#if sortCriteria.find(c => c.column === 'deposit')}
+                    <span class="sort-icon">{sortCriteria.find(c => c.column === 'deposit').direction === 'asc' ? '▲' : '▼'}</span>
+                  {/if}
+                </th>
+              {/if}
               {#if visibleColumns.remaining}
                 <th class="sortable" on:click={() => handleSort('remaining')}>
-                  남은 금액
+                  잔금
                   {#if sortCriteria.find(c => c.column === 'remaining')}
                     <span class="sort-icon">{sortCriteria.find(c => c.column === 'remaining').direction === 'asc' ? '▲' : '▼'}</span>
                   {/if}
@@ -1016,16 +1326,17 @@
                 {/if}
                 {#if visibleColumns.size}
                   <td>
-                    <select bind:value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)}>
-                      {#each sizeOptions as opt}
-                        <option value={opt}>{opt}</option>
-                      {/each}
-                    </select>
+                    <input type="text" value={img.size} on:blur={(e) => updateImageField(img, 'size', e.target.value)} />
                   </td>
                 {/if}
                 {#if visibleColumns.price}
                   <td>
                     <input type="number" value={img.price} on:blur={(e) => updateImageField(img, 'price', e.target.value)} />
+                  </td>
+                {/if}
+                {#if visibleColumns.deposit}
+                  <td>
+                    <input type="number" value={img.deposit} on:blur={(e) => updateImageField(img, 'deposit', e.target.value)} />
                   </td>
                 {/if}
                 {#if visibleColumns.remaining}
@@ -1488,6 +1799,12 @@
     background-color: var(--color-bg);
     padding: var(--space-3) 0;
     color: var(--color-text);
+    will-change: transform, opacity;
+  }
+  .capture-area.swiping {
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grabbing;
   }
 
   /* ===== Grid View ===== */
@@ -1743,5 +2060,90 @@
     height: 48px;
     object-fit: cover;
     border-radius: var(--radius-sm);
+  }
+
+  /* ===== Board View ===== */
+  .board-view {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .board-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .board-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+  .board-item:last-child {
+    border-bottom: none;
+  }
+  .board-item:hover {
+    background: var(--color-surface-hover);
+  }
+  .board-thumb {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: var(--radius);
+    flex-shrink: 0;
+    background: var(--color-surface-hover);
+  }
+  .board-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .board-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .board-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+  .board-meta-sep {
+    color: var(--color-text-muted);
+  }
+  .board-badge {
+    flex-shrink: 0;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-purchase {
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+  }
+  .badge-wish {
+    background: #fef3c7;
+    color: #d97706;
+  }
+  :global(html.dark) .badge-wish {
+    background: rgba(217, 119, 6, 0.15);
+    color: #fbbf24;
+  }
+  .board-empty {
+    padding: var(--space-8);
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
   }
 </style>

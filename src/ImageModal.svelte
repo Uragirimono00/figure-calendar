@@ -7,16 +7,18 @@
     let description = image.description || "";
     let status = image.status || "예약금";
     let teamStatus = image.teamStatus || "코아";
-    let purchaseStatus = image.purchaseStatus || "";
+    let purchaseStatus = image.purchaseStatus || "구매";
     let manufacturer = image.manufacturer || "";
     let releaseDate = image.releaseDate || "";
 
     let type = image.type || "PVC";
-    let size = image.size || "1/1";
+    let size = image.size || "";
     let priceRaw = image.price ? String(image.price) : "";
+    let depositRaw = image.deposit ? String(image.deposit) : "";
     let remainingRaw = image.remaining ? String(image.remaining) : "";
     let expectedCustomsRaw = image.expectedCustoms ? String(image.expectedCustoms) : "";
     $: priceFormatted = formatNumber(priceRaw);
+    $: depositFormatted = formatNumber(depositRaw);
     $: remainingFormatted = formatNumber(remainingRaw);
     $: expectedCustomsFormatted = formatNumber(expectedCustomsRaw);
 
@@ -42,6 +44,11 @@
         priceRaw = val;
         save();
     }
+    function handleDepositInput(event) {
+        let val = event.target.value.replace(/,/g, '').replace(/\D/g, '');
+        depositRaw = val;
+        save();
+    }
     function handleRemainingInput(event) {
         let val = event.target.value.replace(/,/g, '').replace(/\D/g, '');
         remainingRaw = val;
@@ -64,6 +71,7 @@
             type,
             size,
             price: priceRaw,
+            deposit: depositRaw,
             remaining: remainingRaw,
             expectedCustoms: expectedCustomsRaw,
             purchaseDate,
@@ -117,7 +125,6 @@
                     <div class="field">
                         <label for="modal-purchase-status">구매 상태</label>
                         <select id="modal-purchase-status" bind:value={purchaseStatus} on:change={save}>
-                            <option value="">구매</option>
                             <option value="구매">구매</option>
                             <option value="찜">찜 (위시리스트)</option>
                         </select>
@@ -141,6 +148,8 @@
                             <option value="매하">매하</option>
                             <option value="히탐">히탐</option>
                             <option value="래빗츠">래빗츠</option>
+                            <option value="네이버">네이버</option>
+                            <option value="히어로타임">히어로타임</option>
                             <option value="유메">유메</option>
                             <option value="위북">위북</option>
                             <option value="드리머">드리머</option>
@@ -169,31 +178,7 @@
 
                     <div class="field">
                         <label for="modal-size">사이즈</label>
-                        <select id="modal-size" bind:value={size} on:change={save}>
-                            <option value="1/1">1/1</option>
-                            <option value="1/1.5">1/1.5</option>
-                            <option value="1/2">1/2</option>
-                            <option value="1/2.5">1/2.5</option>
-                            <option value="1/3">1/3</option>
-                            <option value="1/3.5">1/3.5</option>
-                            <option value="1/4">1/4</option>
-                            <option value="1/4.5">1/4.5</option>
-                            <option value="1/5">1/5</option>
-                            <option value="1/5.5">1/5.5</option>
-                            <option value="1/6">1/6</option>
-                            <option value="1/6.5">1/6.5</option>
-                            <option value="1/7">1/7</option>
-                            <option value="1/7.5">1/7.5</option>
-                            <option value="1/8">1/8</option>
-                            <option value="1/8.5">1/8.5</option>
-                            <option value="1/9">1/9</option>
-                            <option value="1/9.5">1/9.5</option>
-                            <option value="1/10">1/10</option>
-                            <option value="1/10.5">1/10.5</option>
-                            <option value="1/11">1/11</option>
-                            <option value="1/11.5">1/11.5</option>
-                            <option value="1/12">1/12</option>
-                        </select>
+                        <input id="modal-size" type="text" bind:value={size} on:input={save} placeholder="예: 1/7, 21cm" />
                     </div>
 
                     <div class="field">
@@ -202,7 +187,12 @@
                     </div>
 
                     <div class="field">
-                        <label for="modal-remaining">남은 금액</label>
+                        <label for="modal-deposit">예약금</label>
+                        <input id="modal-deposit" type="text" value={depositFormatted} on:input={handleDepositInput} placeholder="0" />
+                    </div>
+
+                    <div class="field">
+                        <label for="modal-remaining">잔금</label>
                         <input id="modal-remaining" type="text" value={remainingFormatted} on:input={handleRemainingInput} placeholder="0" />
                     </div>
 
