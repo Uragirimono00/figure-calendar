@@ -25,6 +25,8 @@
 // @connect      securetoken.googleapis.com
 // @connect      firestore.googleapis.com
 // @connect      arca.live
+// @updateURL    https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js
+// @downloadURL  https://raw.githubusercontent.com/Uragirimono00/figure-calendar/master/figure-calendar.user.js
 // @run-at       document-idle
 // ==/UserScript==
 
