@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         arca.live 댓글 추첨기
 // @namespace    arca-comment-lottery
-// @version      1.2
+// @version      1.2.1
 // @description  아카라이브 게시글 댓글에서 조건에 맞는 댓글을 필터링하고 N명을 랜덤 추첨합니다.
 // @match        *://arca.live/b/*/*
 // @grant        GM_addStyle
