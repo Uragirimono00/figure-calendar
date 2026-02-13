@@ -132,6 +132,45 @@
       max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
+    #lottery-candidates { margin-top: 14px; display: none; }
+    .lot-cand-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+    }
+    .lot-cand-title { font-size: 13px; font-weight: bold; color: #aaa; }
+    .lot-cand-count { font-size: 11px; color: #888; }
+    .lot-cand-list {
+      background: #0d1117; border: 1px solid #333; border-radius: 6px;
+      max-height: 250px; overflow-y: auto; padding: 6px;
+    }
+    .lot-cand-list::-webkit-scrollbar { width: 4px; }
+    .lot-cand-list::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+    .lot-cand-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 6px; border-bottom: 1px solid #1a1a2e; font-size: 12px;
+    }
+    .lot-cand-item:last-child { border-bottom: none; }
+    .lot-cand-item:hover { background: rgba(255,255,255,0.03); }
+    .lot-cand-item.excluded { opacity: 0.35; text-decoration: line-through; }
+    .lot-cand-num { color: #555; font-size: 10px; width: 28px; flex-shrink: 0; text-align: right; }
+    .lot-cand-link {
+      color: #8ec5fc; text-decoration: none; flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .lot-cand-link:hover { color: #fff; text-decoration: underline; }
+    .lot-cand-exclude {
+      background: none; border: 1px solid #444; color: #e94560;
+      font-size: 10px; padding: 2px 6px; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+    }
+    .lot-cand-exclude:hover { background: rgba(233,69,96,0.15); }
+    .lot-cand-item.excluded .lot-cand-exclude { color: #51cf66; border-color: #51cf66; }
+    .lot-cand-item.excluded .lot-cand-exclude:hover { background: rgba(81,207,102,0.15); }
+    #lottery-confirm-btn {
+      width: 100%; padding: 10px; border: none; border-radius: 6px;
+      background: #51cf66; color: #fff; font-size: 14px; font-weight: bold;
+      cursor: pointer; margin-top: 8px; transition: background 0.2s; display: none;
+    }
+    #lottery-confirm-btn:hover { background: #40c057; }
+
     #lottery-log { margin-top: 14px; display: none; }
     .lot-log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .lot-log-title { font-size: 13px; font-weight: bold; color: #aaa; }
@@ -299,6 +338,7 @@
     panel.querySelector(".lot-log-copy").addEventListener("click", () => copyLog());
     panel.querySelector("#lottery-save-btn").addEventListener("click", () => saveRecording());
     panel.querySelector("#lottery-replay-btn").addEventListener("click", () => replayAnimation());
+    panel.querySelector("#lottery-confirm-btn").addEventListener("click", () => confirmLottery());
 
     panel.querySelector("#lot-exclude-reply").checked = true;
     panel.querySelector("#lot-exclude-reply").addEventListener("change", () => scanEmoticons());
@@ -481,6 +521,15 @@
           <div class="lot-winner-list" id="lottery-winner-list"></div>
         </div>
 
+        <div id="lottery-candidates">
+          <div class="lot-cand-header">
+            <span class="lot-cand-title">\uD83D\uDC65 추첨 대상자 목록</span>
+            <span class="lot-cand-count" id="lottery-cand-count"></span>
+          </div>
+          <div class="lot-cand-list" id="lottery-cand-list"></div>
+          <button id="lottery-confirm-btn">\u2705 대상자 확인 완료 - 추첨 진행</button>
+        </div>
+
         <div id="lottery-log">
           <div class="lot-log-header">
             <span class="lot-log-title">\uD83D\uDCCB 추첨 로그</span>
@@ -498,6 +547,9 @@
 
   let isRunning = false;
   let logLines = [];
+  let pendingCandidates = null;
+  let excludedUsers = new Set();
+  let pendingWinnerCount = 0;
 
   function addLog(msg) {
     const ts = formatDate(new Date());
@@ -1127,6 +1179,8 @@
     if (isRunning) return;
     isRunning = true;
     logLines = [];
+    pendingCandidates = null;
+    excludedUsers = new Set();
 
     const runBtn = document.getElementById("lottery-run-btn");
     runBtn.disabled = true;
@@ -1134,6 +1188,8 @@
 
     const resultEl = document.getElementById("lottery-result");
     resultEl.style.display = "none";
+    document.getElementById("lottery-candidates").style.display = "none";
+    document.getElementById("lottery-confirm-btn").style.display = "none";
     document.getElementById("lottery-canvas-wrap").style.display = "none";
     document.getElementById("lottery-save-btn").style.display = "none";
     document.getElementById("lottery-replay-btn").style.display = "none";
@@ -1285,37 +1341,118 @@
         isRunning = false; return;
       }
 
-      // 추첨
-      const actualWin = Math.min(winnerCount, uniqueComments.length);
-      const shuffled = shuffleArray(uniqueComments);
-      const winners = shuffled.slice(0, actualWin);
-
-      addLog("");
-      addLog(`=== \uCD94\uCCA8 \uACB0\uACFC (${actualWin}\uBA85) ===`);
-      for (let i = 0; i < winners.length; i++) {
-        const w = winners[i];
-        const tp = w.isFixed ? "[\uACE0\uC815\uB2C9]" : "[\uACC4\uC815]";
-        const ct = w.text || (w.emoticons.length > 0 ? "[\uC544\uCE74\uCF58]" : "");
-        addLog(`  ${i + 1}\uB4F1: ${tp} ${w.username} ${ct}`);
-      }
-
-      // 애니메이션
-      setProgress("\uCD94\uCCA8 \uC560\uB2C8\uBA54\uC774\uC158...", 90);
-      await playAnimation(winners, uniqueComments);
-
-      addLog(""); addLog("=== \uCD94\uCCA8 \uC644\uB8CC ===");
-      setProgress("\uCD94\uCCA8 \uC644\uB8CC!", 100);
-
-      displayResults(winners, uniqueComments.length);
+      // 대상자 목록 표시 → 사용자 확인 대기
+      pendingCandidates = uniqueComments;
+      pendingWinnerCount = winnerCount;
+      excludedUsers = new Set();
+      displayCandidates(uniqueComments);
+      setProgress("\uB300\uC0C1\uC790 \uD655\uC778 \uB300\uAE30 \uC911... \uC81C\uC678\uD560 \uC0AC\uB78C\uC744 \uC120\uD0DD\uD558\uC138\uC694.", 85);
+      runBtn.disabled = false; runBtn.textContent = "\uD83C\uDFB0 \uCD94\uCCA8 \uC2DC\uC791";
+      isRunning = false;
 
     } catch (err) {
       addLog(`\uC624\uB958 \uBC1C\uC0DD: ${err.message}`);
       setProgress("\uC624\uB958 \uBC1C\uC0DD", 100);
+      runBtn.disabled = false; runBtn.textContent = "\uD83C\uDFB0 \uCD94\uCCA8 \uC2DC\uC791";
+      isRunning = false;
     }
+  }
+
+  async function confirmLottery() {
+    if (!pendingCandidates || isRunning) return;
+    isRunning = true;
+
+    const runBtn = document.getElementById("lottery-run-btn");
+    runBtn.disabled = true;
+    document.getElementById("lottery-confirm-btn").style.display = "none";
+
+    // 제외된 사용자 필터링
+    let finalCandidates = pendingCandidates;
+    if (excludedUsers.size > 0) {
+      finalCandidates = pendingCandidates.filter(c => !excludedUsers.has(c.username));
+      addLog("");
+      addLog(`=== 수동 제외: ${excludedUsers.size}명 제외 -> ${finalCandidates.length}명 남음 ===`);
+      for (const name of excludedUsers) {
+        addLog(`  제외: ${name}`);
+      }
+    }
+
+    if (finalCandidates.length === 0) {
+      addLog(""); addLog("\uCD94\uCCA8 \uB300\uC0C1\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.");
+      setProgress("\uCD94\uCCA8 \uB300\uC0C1 \uC5C6\uC74C", 100);
+      runBtn.disabled = false; runBtn.textContent = "\uD83C\uDFB0 \uCD94\uCCA8 \uC2DC\uC791";
+      isRunning = false; pendingCandidates = null; return;
+    }
+
+    const winnerCount = pendingWinnerCount;
+    const actualWin = Math.min(winnerCount, finalCandidates.length);
+    const shuffled = shuffleArray(finalCandidates);
+    const winners = shuffled.slice(0, actualWin);
+
+    addLog("");
+    addLog(`=== \uCD94\uCCA8 \uACB0\uACFC (${actualWin}\uBA85) ===`);
+    for (let i = 0; i < winners.length; i++) {
+      const w = winners[i];
+      const tp = w.isFixed ? "[\uACE0\uC815\uB2C9]" : "[\uACC4\uC815]";
+      const ct = w.text || (w.emoticons.length > 0 ? "[\uC544\uCE74\uCF58]" : "");
+      addLog(`  ${i + 1}\uB4F1: ${tp} ${w.username} ${ct}`);
+    }
+
+    // 애니메이션
+    setProgress("\uCD94\uCCA8 \uC560\uB2C8\uBA54\uC774\uC158...", 90);
+    await playAnimation(winners, finalCandidates);
+
+    addLog(""); addLog("=== \uCD94\uCCA8 \uC644\uB8CC ===");
+    setProgress("\uCD94\uCCA8 \uC644\uB8CC!", 100);
+
+    displayResults(winners, finalCandidates.length);
 
     runBtn.disabled = false;
     runBtn.textContent = "\uD83C\uDFB0 \uCD94\uCCA8 \uC2DC\uC791";
     isRunning = false;
+    pendingCandidates = null;
+  }
+
+  function updateCandCount() {
+    const count = document.getElementById("lottery-cand-count");
+    const total = pendingCandidates ? pendingCandidates.length : 0;
+    const active = total - excludedUsers.size;
+    count.textContent = excludedUsers.size > 0 ? `${active}명 / ${total}명 (${excludedUsers.size}명 제외)` : `${total}명`;
+  }
+
+  function displayCandidates(candidates) {
+    const wrap = document.getElementById("lottery-candidates");
+    const list = document.getElementById("lottery-cand-list");
+    const confirmBtn = document.getElementById("lottery-confirm-btn");
+    wrap.style.display = "block";
+    confirmBtn.style.display = "block";
+    updateCandCount();
+    list.innerHTML = "";
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const tag = c.isFixed ? '<span class="lot-tag-fixed">\uACE0\uC815\uB2C9</span>' : '<span class="lot-tag-account">\uACC4\uC815</span>';
+      const profileUrl = `https://arca.live/u/@${encodeURIComponent(c.username)}`;
+      const item = document.createElement("div");
+      item.className = "lot-cand-item";
+      item.innerHTML = `<span class="lot-cand-num">${i + 1}</span><a class="lot-cand-link" href="${profileUrl}" target="_blank">${escapeHtml(c.username)}</a>${tag}`;
+
+      const btn = document.createElement("button");
+      btn.className = "lot-cand-exclude";
+      btn.textContent = "\uC81C\uC678";
+      btn.addEventListener("click", () => {
+        const excluded = item.classList.toggle("excluded");
+        if (excluded) {
+          excludedUsers.add(c.username);
+          btn.textContent = "\uBCF5\uC6D0";
+        } else {
+          excludedUsers.delete(c.username);
+          btn.textContent = "\uC81C\uC678";
+        }
+        updateCandCount();
+      });
+      item.appendChild(btn);
+      list.appendChild(item);
+    }
   }
 
   function displayResults(winners, totalCandidates) {
